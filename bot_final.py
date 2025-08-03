@@ -1,4 +1,8 @@
-import pyodbc
+# Controle de spam e duplicação - MAIS RIGOROSO
+ultimo_comando = {}
+numeros_ja_notificados = set()
+mensagens_processadas = {}  # Cache para evitar reprocessamento
+INTERVALO_MINIMO = 10  # Aumentado para 10 segundosimport pyodbc
 import requests
 from flask import Flask, request
 from datetime import datetime
@@ -13,25 +17,22 @@ from collections import defaultdict
 app = Flask(__name__)
 
 # Z-API configs - USANDO VARIÁVEIS DE AMBIENTE
-INSTANCE_ID = os.environ.get('INSTANCE_ID', 'SEU_INSTANCE_ID_AQUI')
-TOKEN = os.environ.get('TOKEN', 'SEU_TOKEN_AQUI')
-CLIENT_TOKEN = os.environ.get('CLIENT_TOKEN', 'SEU_CLIENT_TOKEN_AQUI')
-
-# Controle de spam e duplicação - MAIS RIGOROSO
-ultimo_comando = {}
-numeros_ja_notificados = set()
-mensagens_processadas = {}  # Cache para evitar reprocessamento
-INTERVALO_MINIMO = 10  # Aumentado para 10 segundos
+INSTANCE_ID = os.environ.get('INSTANCE_ID')
+TOKEN = os.environ.get('TOKEN')
+CLIENT_TOKEN = os.environ.get('CLIENT_TOKEN')
 
 # Cache para usuários
 cache_usuarios = {}
 
 def conectar_db():
     # USANDO VARIÁVEIS DE AMBIENTE PARA SEGURANÇA
-    server = os.environ.get('DB_SERVER', 'alrflorestal.database.windows.net')
-    database = os.environ.get('DB_DATABASE', 'Tabela_teste')
-    username = os.environ.get('DB_USERNAME', 'sqladmin')
-    password = os.environ.get('DB_PASSWORD', 'SenhaForte123!')
+    server = os.environ.get('DB_SERVER')
+    database = os.environ.get('DB_DATABASE')
+    username = os.environ.get('DB_USERNAME')
+    password = os.environ.get('DB_PASSWORD')
+    
+    if not all([server, database, username, password]):
+        raise Exception("Variáveis de ambiente do banco não configuradas")
     
     return pyodbc.connect(
         f'DRIVER={{ODBC Driver 17 for SQL Server}};'
