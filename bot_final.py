@@ -32,10 +32,8 @@ def conectar_db():
     database = os.environ.get('DB_DATABASE')
     username = os.environ.get('DB_USERNAME')
     password = os.environ.get('DB_PASSWORD')
-    
     if not all([server, database, username, password]):
         raise Exception("Variáveis de ambiente do banco não configuradas")
-    
     return pyodbc.connect(
         f'DRIVER={{ODBC Driver 17 for SQL Server}};'
         f'SERVER={server};'
@@ -88,10 +86,7 @@ def verificar_autorizacao(numero):
     global cache_usuarios
     cache_usuarios = buscar_usuarios_autorizados()
     numero_normalizado = normalizar_telefone(numero)
-    if numero_normalizado in cache_usuarios:
-        return True
-    else:
-        return False
+    return numero_normalizado in cache_usuarios
 
 def obter_projetos_usuario(numero):
     numero_normalizado = normalizar_telefone(numero)
@@ -129,18 +124,14 @@ def gerar_hash_mensagem(dados, numero):
     """Gera hash único mais específico para cada mensagem"""
     import hashlib
     timestamp_atual = str(int(time.time()))
-    
     if "audio" in dados:
-        # Para áudio: usar URL + número + timestamp do sistema
         audio_url = dados["audio"].get("audioUrl", "")
         conteudo = f"AUDIO_{numero}_{audio_url}_{timestamp_atual}"
     elif "text" in dados:
-        # Para texto: usar mensagem + número + timestamp do sistema
         texto = dados["text"].get("message", "")
         conteudo = f"TEXT_{numero}_{texto}_{timestamp_atual}"
     else:
         conteudo = f"OTHER_{numero}_{timestamp_atual}"
-    
     hash_final = hashlib.md5(conteudo.encode()).hexdigest()
     print(f"[DEBUG] Hash gerado: {hash_final[:8]} para {numero}")
     return hash_final
@@ -148,34 +139,31 @@ def gerar_hash_mensagem(dados, numero):
 def ja_processou_mensagem(hash_mensagem):
     """Verifica se a mensagem já foi processada - Cache de 60 segundos"""
     agora = time.time()
-    
-    # Limpar mensagens antigas (mais de 60 segundos)
     hashes_removidos = []
     for hash_msg, timestamp in list(mensagens_processadas.items()):
         if agora - timestamp > 60:
             del mensagens_processadas[hash_msg]
             hashes_removidos.append(hash_msg[:8])
-    
     if hashes_removidos:
         print(f"[DEBUG] Cache limpo: {len(hashes_removidos)} hashes removidos")
-    
-    # Verificar se já processou
     if hash_mensagem in mensagens_processadas:
         print(f"[DEBUG] Hash duplicado encontrado: {hash_mensagem[:8]}")
         return True
-    
-    # Marcar como processada
     mensagens_processadas[hash_mensagem] = agora
     print(f"[DEBUG] Hash registrado: {hash_mensagem[:8]}")
     return False
 
-# ... DEMAIS FUNÇÕES (sem alterações) ...
-# (mantive todas as funções seguintes como estavam no seu último código)
+# ===== ROTA PRINCIPAL (WEBHOOK) =====
 
-# Cole o restante do seu código normalmente aqui (todas as funções,
-# formatações, processamento de comandos, rotas Flask, etc).
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    data = request.json
+    print("Recebido no webhook:", data)
+    # Aqui você pode chamar suas funções de processamento principais,
+    # por exemplo, processar mensagem de texto, áudio, etc.
+    return "OK", 200
 
-# No final, mantenha o main:
+# ===== MAIN =====
 if __name__ == '__main__':
     print("🤖 Bot Completo - Texto + Áudio iniciando...")
     print("🎤 Reconhecimento de voz: Google Speech Recognition")
