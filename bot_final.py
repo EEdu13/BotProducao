@@ -11,16 +11,6 @@ import speech_recognition as sr
 from collections import defaultdict
 import functools
 
-# Configuração de logging simples - CORRIGIDO
-def safe_print(*args, **kwargs):
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    # Remove flush se já estiver nos kwargs para evitar conflito
-    if 'flush' in kwargs:
-        del kwargs['flush']
-    print(f"[{timestamp}]", *args, **kwargs, flush=True)
-
-print = safe_print
-
 app = Flask(__name__)
 
 # ================== CONFIG RAILWAY ==================
