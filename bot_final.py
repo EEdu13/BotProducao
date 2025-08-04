@@ -9,6 +9,9 @@ import librosa
 import soundfile as sf
 import speech_recognition as sr
 from collections import defaultdict
+import functools
+print = functools.partial(print, flush=True)
+
 
 app = Flask(__name__)
 
