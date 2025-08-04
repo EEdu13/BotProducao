@@ -14,14 +14,6 @@ import functools
 app = Flask(__name__)
 
 # ================== CONFIG RAILWAY ==================
-# Verificação de variáveis obrigatórias
-REQUIRED_ENV_VARS = ['INSTANCE_ID', 'TOKEN', 'CLIENT_TOKEN', 'DB_PASSWORD']
-
-missing_vars = [var for var in REQUIRED_ENV_VARS if not os.environ.get(var)]
-if missing_vars:
-    print(f"❌ ERRO: Variáveis de ambiente obrigatórias não definidas: {missing_vars}")
-    raise ValueError(f"Configure as variáveis: {', '.join(missing_vars)}")
-
 # Z-API configs - SOMENTE VARIÁVEIS DE AMBIENTE
 INSTANCE_ID = os.environ.get('INSTANCE_ID')
 TOKEN = os.environ.get('TOKEN')
@@ -32,6 +24,25 @@ DB_SERVER = os.environ.get('DB_SERVER', 'alrflorestal.database.windows.net')
 DB_DATABASE = os.environ.get('DB_DATABASE', 'Tabela_teste')
 DB_USERNAME = os.environ.get('DB_USERNAME', 'sqladmin')
 DB_PASSWORD = os.environ.get('DB_PASSWORD')
+
+# Debug - mostrar quais variáveis foram carregadas
+print("🔍 DEBUG - Variáveis carregadas:")
+print(f"INSTANCE_ID: {'✅ OK' if INSTANCE_ID else '❌ VAZIO'}")
+print(f"TOKEN: {'✅ OK' if TOKEN else '❌ VAZIO'}")
+print(f"CLIENT_TOKEN: {'✅ OK' if CLIENT_TOKEN else '❌ VAZIO'}")
+print(f"DB_PASSWORD: {'✅ OK' if DB_PASSWORD else '❌ VAZIO'}")
+
+# Verificação com mensagem mais clara
+missing_vars = []
+if not INSTANCE_ID: missing_vars.append('INSTANCE_ID')
+if not TOKEN: missing_vars.append('TOKEN')
+if not CLIENT_TOKEN: missing_vars.append('CLIENT_TOKEN')
+if not DB_PASSWORD: missing_vars.append('DB_PASSWORD')
+
+if missing_vars:
+    print(f"❌ ERRO: Variáveis de ambiente não encontradas: {missing_vars}")
+    print("🔍 Verifique no Railway se estas variáveis estão configuradas")
+    raise ValueError(f"Configure as variáveis: {', '.join(missing_vars)}")
 
 print("🔐 Credenciais carregadas das variáveis de ambiente")
 print(f"🌐 Conectando em: {DB_SERVER}")
