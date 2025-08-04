@@ -11,12 +11,15 @@ import speech_recognition as sr
 from collections import defaultdict
 import functools
 
-# Configuração de logging simples
-def log_print(*args, **kwargs):
+# Configuração de logging simples - CORRIGIDO
+def safe_print(*args, **kwargs):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # Remove flush se já estiver nos kwargs para evitar conflito
+    if 'flush' in kwargs:
+        del kwargs['flush']
     print(f"[{timestamp}]", *args, **kwargs, flush=True)
 
-print = log_print
+print = safe_print
 
 app = Flask(__name__)
 
@@ -55,14 +58,37 @@ cache_usuarios = {}
 
 def conectar_db():
     try:
-        connection_string = (
-            f'DRIVER={{ODBC Driver 17 for SQL Server}};'
+        # CORRIGIDO: Driver mais compatível para Railway
+        drivers = [
+            '{ODBC Driver 18 for SQL Server}',  # Mais recente
+            '{ODBC Driver 17 for SQL Server}',  # Fallback
+            '{ODBC Driver 13 for SQL Server}',  # Mais antigo
+            '{FreeTDS}'  # Fallback para Linux
+        ]
+        
+        connection_string_base = (
             f'SERVER={DB_SERVER};'
             f'DATABASE={DB_DATABASE};'
             f'UID={DB_USERNAME};'
-            f'PWD={DB_PASSWORD}'
+            f'PWD={DB_PASSWORD};'
+            f'TrustServerCertificate=yes;'  # Para conexões Azure
         )
-        return pyodbc.connect(connection_string)
+        
+        # Tenta cada driver até conseguir conectar
+        for driver in drivers:
+            try:
+                connection_string = f'DRIVER={driver};{connection_string_base}'
+                print(f"🔍 Tentando driver: {driver}")
+                conn = pyodbc.connect(connection_string, timeout=30)
+                print(f"✅ Conectado com driver: {driver}")
+                return conn
+            except Exception as e:
+                print(f"❌ Falha com driver {driver}: {str(e)[:100]}")
+                continue
+        
+        # Se nenhum driver funcionar
+        raise Exception("Nenhum driver ODBC disponível funcionou")
+        
     except Exception as e:
         print(f"[ERRO] Falha na conexão SQL: {e}")
         raise
@@ -107,6 +133,8 @@ def buscar_usuarios_autorizados():
         return usuarios_data
     except Exception as e:
         print(f"[ERRO] Falha ao buscar usuários: {e}")
+        print("⚠️ Bot funcionará em modo de emergência (sem autenticação)")
+        # Retorna dicionário vazio - bot não funcionará até conectar
         return {}
 
 def verificar_autorizacao(numero):
@@ -988,10 +1016,16 @@ def webhook():
 # Inicialização para Gunicorn (fora do if __name__)
 try:
     print("🔧 Inicializando para Gunicorn...")
+    print("🔍 Testando conexão com banco de dados...")
     cache_usuarios = buscar_usuarios_autorizados()
-    print("✅ Inicialização do Gunicorn concluída")
+    if cache_usuarios:
+        print("✅ Inicialização do Gunicorn concluída")
+        print(f"👥 {len(cache_usuarios)} usuários autorizados carregados")
+    else:
+        print("⚠️ Nenhum usuário carregado - verificar conexão DB")
 except Exception as e:
     print(f"❌ Erro na inicialização: {e}")
+    print("🔄 Bot continuará tentando conectar...")
 
 if __name__ == '__main__':
     print("🤖 Bot Completo - Texto + Áudio iniciando...")
@@ -1002,10 +1036,21 @@ if __name__ == '__main__':
     print("🏆 NOVO: Ranking de supervisores por faturamento")
     print("📅 CORRIGIDO: Processamento de períodos por voz")
     print("🚀 RAILWAY: Configurado para deploy em produção")
+    print("🔧 CORRIGIDO: Drivers ODBC múltiplos para compatibilidade")
     
     # Carrega cache inicial de usuários
-    cache_usuarios = buscar_usuarios_autorizados()
+    try:
+        print("🔍 Testando conexão inicial com banco...")
+        cache_usuarios = buscar_usuarios_autorizados()
+        if cache_usuarios:
+            print(f"👥 {len(cache_usuarios)} usuários carregados com sucesso")
+        else:
+            print("⚠️ Aguardando conexão com banco de dados...")
+    except Exception as e:
+        print(f"❌ Erro na conexão inicial: {e}")
     
     port = int(os.environ.get('PORT', 5000))
     print(f"🌐 Servidor iniciando na porta {port}")
-    app.run(host='0.0.0.0', port=port, debug=False)
+    app.run(host='0.0.0.0', port=port, debug=False)git add .
+git commit -m "ajuste debug realtime e Procfile"
+git push

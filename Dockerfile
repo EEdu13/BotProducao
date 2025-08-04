@@ -6,7 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive
 
-# Instalar dependências do sistema e ODBC SQL Server
+# Instalar dependências do sistema e ODBC SQL Server - CORRIGIDO PARA RAILWAY
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         curl \
@@ -14,13 +14,22 @@ RUN apt-get update && \
         apt-transport-https \
         gcc \
         g++ \
-        unixodbc-dev && \
+        unixodbc-dev \
+        freetds-dev \
+        freetds-bin \
+        tdsodbc && \
     # Adicionar repositório Microsoft
     curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg && \
     echo "deb [arch=amd64,armhf,arm64 signed-by=/usr/share/keyrings/microsoft-prod.gpg] https://packages.microsoft.com/debian/12/prod bookworm main" > /etc/apt/sources.list.d/mssql-release.list && \
-    # Instalar ODBC Driver
+    # Instalar ODBC Drivers (múltiplas versões para compatibilidade)
     apt-get update && \
-    ACCEPT_EULA=Y apt-get install -y msodbcsql17 && \
+    ACCEPT_EULA=Y apt-get install -y msodbcsql18 || echo "ODBC 18 não disponível" && \
+    ACCEPT_EULA=Y apt-get install -y msodbcsql17 || echo "ODBC 17 não disponível" && \
+    # Configurar FreeTDS como fallback
+    echo '[FreeTDS]' >> /etc/odbcinst.ini && \
+    echo 'Description=FreeTDS Driver' >> /etc/odbcinst.ini && \
+    echo 'Driver=/usr/lib/x86_64-linux-gnu/odbc/libtdsodbc.so' >> /etc/odbcinst.ini && \
+    echo 'Setup=/usr/lib/x86_64-linux-gnu/odbc/libtdsS.so' >> /etc/odbcinst.ini && \
     # Limpeza para reduzir tamanho da imagem
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
