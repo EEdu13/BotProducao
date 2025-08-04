@@ -1,7 +1,23 @@
+# Framework web
 Flask==3.0.0
+Werkzeug==3.0.1
+
+# Cliente HTTP
 requests==2.31.0
-pyodbc>=4.0.35
+
+# Banco de dados
+pyodbc==4.0.35
+
+# Processamento de áudio
 librosa==0.10.1
 soundfile==0.12.1
 SpeechRecognition==3.10.0
-numpy
+
+# Computação científica
+numpy==1.24.3
+
+# Utilitários
+python-dotenv==1.0.0
+
+# Gunicorn para produção (Railway/Heroku)
+gunicorn==21.2.0
