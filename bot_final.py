@@ -135,7 +135,6 @@ def buscar_usuarios_autorizados():
     except Exception as e:
         print(f"[ERRO] Falha ao buscar usuários: {e}")
         print("⚠️ Bot funcionará em modo de emergência (sem autenticação)")
-        # Retorna dicionário vazio - bot não funcionará até conectar
         return {}
 
 def verificar_autorizacao(numero):
@@ -185,11 +184,9 @@ def gerar_hash_mensagem(dados, numero):
     timestamp_atual = str(int(time.time()))
     
     if "audio" in dados:
-        # Para áudio: usar URL + número + timestamp do sistema
         audio_url = dados["audio"].get("audioUrl", "")
         conteudo = f"AUDIO_{numero}_{audio_url}_{timestamp_atual}"
     elif "text" in dados:
-        # Para texto: usar mensagem + número + timestamp do sistema
         texto = dados["text"].get("message", "")
         conteudo = f"TEXT_{numero}_{texto}_{timestamp_atual}"
     else:
@@ -223,15 +220,26 @@ def ja_processou_mensagem(hash_mensagem):
     print(f"[DEBUG] Hash registrado: {hash_mensagem[:8]}")
     return False
 
-def obter_dados_detalhados_hoje(numero_usuario):
+def obter_dados_detalhados_hoje(numero_usuario, projeto_especifico=None):
     try:
         conn = conectar_db()
         cursor = conn.cursor()
         data_hoje = datetime.today().strftime('%Y-%m-%d')
         projetos_usuario = obter_projetos_usuario(numero_usuario)
-        if not projetos_usuario:
+        
+        # Se projeto específico foi informado, verificar se usuário tem acesso
+        if projeto_especifico:
+            if projeto_especifico not in projetos_usuario:
+                print(f"[ERRO] Usuário {numero_usuario} não tem acesso ao projeto {projeto_especifico}")
+                return []
+            projetos_filtro = [projeto_especifico]
+        else:
+            projetos_filtro = projetos_usuario
+            
+        if not projetos_filtro:
             return []
-        placeholders = ','.join(['?' for _ in projetos_usuario])
+            
+        placeholders = ','.join(['?' for _ in projetos_filtro])
         query = f"""
         SELECT 
             NOME_DO_LIDER,
@@ -246,24 +254,38 @@ def obter_dados_detalhados_hoje(numero_usuario):
         GROUP BY NOME_DO_LIDER, SERVIÇO, MEDIDA, MOD, PROJETO
         ORDER BY PROJETO, NOME_DO_LIDER, SERVIÇO
         """
-        parametros = [data_hoje] + projetos_usuario
+        parametros = [data_hoje] + projetos_filtro
         cursor.execute(query, parametros)
         resultados = cursor.fetchall()
         conn.close()
+        
+        if projeto_especifico:
+            print(f"[INFO] Dados filtrados para projeto {projeto_especifico}: {len(resultados)} registros")
+        
         return resultados
     except Exception as e:
         print(f"[ERRO] Falha ao consultar dados hoje: {e}")
         return []
 
-def obter_dados_detalhados_periodo(data_inicio, data_fim, numero_usuario):
+def obter_dados_detalhados_periodo(data_inicio, data_fim, numero_usuario, projeto_especifico=None):
     try:
         conn = conectar_db()
         cursor = conn.cursor()
         projetos_usuario = obter_projetos_usuario(numero_usuario)
-        if not projetos_usuario:
+        
+        # Se projeto específico foi informado, verificar se usuário tem acesso
+        if projeto_especifico:
+            if projeto_especifico not in projetos_usuario:
+                print(f"[ERRO] Usuário {numero_usuario} não tem acesso ao projeto {projeto_especifico}")
+                return []
+            projetos_filtro = [projeto_especifico]
+        else:
+            projetos_filtro = projetos_usuario
+            
+        if not projetos_filtro:
             return []
-        placeholders = ','.join(['?' for _ in projetos_usuario])
-        # CORRIGIDO: ENTRE DATAS (INCLUINDO INÍCIO E FIM)
+            
+        placeholders = ','.join(['?' for _ in projetos_filtro])
         query = f"""
         SELECT 
             NOME_DO_LIDER,
@@ -278,10 +300,14 @@ def obter_dados_detalhados_periodo(data_inicio, data_fim, numero_usuario):
         GROUP BY NOME_DO_LIDER, SERVIÇO, MEDIDA, MOD, PROJETO
         ORDER BY PROJETO, NOME_DO_LIDER, SERVIÇO
         """
-        parametros = [data_inicio, data_fim] + projetos_usuario
+        parametros = [data_inicio, data_fim] + projetos_filtro
         cursor.execute(query, parametros)
         resultados = cursor.fetchall()
         conn.close()
+        
+        if projeto_especifico:
+            print(f"[INFO] Dados filtrados para projeto {projeto_especifico} no período: {len(resultados)} registros")
+            
         return resultados
     except Exception as e:
         print(f"[ERRO] Falha ao consultar período: {e}")
@@ -316,7 +342,6 @@ def obter_colaboradores_por_classe(projetos):
         print(f"[ERRO] Falha ao buscar classes: {e}")
         return {}
 
-# NOVA FUNÇÃO: Buscar supervisores por faturamento
 def obter_supervisores_por_faturamento(projetos_usuario, data_inicio=None, data_fim=None):
     """Busca ranking de supervisores por faturamento"""
     try:
@@ -329,7 +354,6 @@ def obter_supervisores_por_faturamento(projetos_usuario, data_inicio=None, data_
         placeholders = ','.join(['?' for _ in projetos_usuario])
         
         if data_inicio and data_fim:
-            # Para período específico
             query = f"""
             SELECT 
                 SUPERVISOR,
@@ -344,7 +368,6 @@ def obter_supervisores_por_faturamento(projetos_usuario, data_inicio=None, data_
             """
             parametros = [data_inicio, data_fim] + projetos_usuario
         else:
-            # Para hoje
             data_hoje = datetime.today().strftime('%Y-%m-%d')
             query = f"""
             SELECT 
@@ -364,16 +387,10 @@ def obter_supervisores_por_faturamento(projetos_usuario, data_inicio=None, data_
         resultados = cursor.fetchall()
         conn.close()
         
-        print(f"[DEBUG] Encontrados {len(resultados)} supervisores com faturamento")
-        for supervisor, faturado in resultados[:5]:  # Log dos primeiros 5
-            print(f"[DEBUG] Supervisor: {supervisor} - Faturado: R$ {faturado:,.2f}")
-            
         return [(supervisor, faturado) for supervisor, faturado in resultados if faturado > 0]
         
     except Exception as e:
         print(f"[ERRO] Falha ao buscar supervisores: {e}")
-        import traceback
-        traceback.print_exc()
         return []
 
 def agrupar_dados_completo(dados):
@@ -394,7 +411,6 @@ def agrupar_dados_completo(dados):
         producao = round(linha[5] or 0, 2)
         faturado = round(linha[6] or 0, 2)
         
-        # NORMALIZAR MODALIDADE - Padronizar maiúsculas/minúsculas
         modalidade = normalizar_modalidade(modalidade_original)
         
         if projeto not in resumo_projetos:
@@ -433,35 +449,22 @@ def agrupar_dados_completo(dados):
     return resumo_projetos, projetos_modalidade, lideres_detalhado, servicos_por_projeto
 
 def normalizar_modalidade(modalidade):
-    """Normaliza modalidades para agrupar variações de maiúscula/minúscula"""
     if not modalidade:
         return "N/A"
     
     modalidade_limpa = modalidade.strip()
     
-    # Dicionário de normalização
     normalizacao = {
-        'mec': 'Mec',
-        'MEC': 'Mec', 
-        'mecânica': 'Mec',
-        'mecanica': 'Mec',
-        'man': 'Man',
-        'MAN': 'Man',
-        'manual': 'Man',
-        'apo': 'Apo',
-        'APO': 'Apo',
-        'apoio': 'Apo',
-        'dro': 'Dro',
-        'DRO': 'Dro',
-        'drone': 'Dro'
+        'mec': 'Mec', 'MEC': 'Mec', 'mecânica': 'Mec', 'mecanica': 'Mec',
+        'man': 'Man', 'MAN': 'Man', 'manual': 'Man',
+        'apo': 'Apo', 'APO': 'Apo', 'apoio': 'Apo',
+        'dro': 'Dro', 'DRO': 'Dro', 'drone': 'Dro'
     }
     
-    # Verificar se existe uma normalização específica
     modalidade_lower = modalidade_limpa.lower()
     if modalidade_lower in normalizacao:
         return normalizacao[modalidade_lower]
     
-    # Se não encontrar, capitalizar primeira letra
     return modalidade_limpa.capitalize()
 
 def formatar_moeda(valor):
@@ -470,11 +473,6 @@ def formatar_moeda(valor):
 def formatar_numero(valor):
     return f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-def emoji_mod(mod):
-    # Removido - não usar mais emojis para padronizar
-    return ""
-
-# FUNÇÃO MODIFICADA: Adicionado ranking de supervisores e melhor formatação visual
 def formatar_resumo_geral(dados, numero_usuario, titulo_data, data_inicio=None, data_fim=None):
     resumo_projetos, projetos_modalidade, _, _ = agrupar_dados_completo(dados)
     nome_usuario = obter_nome_usuario(numero_usuario)
@@ -486,7 +484,6 @@ def formatar_resumo_geral(dados, numero_usuario, titulo_data, data_inicio=None, 
     total_faturado = sum(proj['faturado'] for proj in resumo_projetos.values())
     texto += f"💰 Faturado Total: {formatar_moeda(total_faturado)}\n"
 
-    # Modalidades TOTAIS (sem emojis para padronizar)
     modalidades_totais = defaultdict(lambda: {'producao': 0, 'faturado': 0})
     for projeto, mods in projetos_modalidade.items():
         for mod, dados_mod in mods.items():
@@ -498,10 +495,8 @@ def formatar_resumo_geral(dados, numero_usuario, titulo_data, data_inicio=None, 
 
     texto += f"---------------------------------------------\n"
 
-    # Colaboradores (total geral)
     total_colabs = sum(sum(cl.values()) for cl in classes_info.values())
     texto += f"👤Colaboradores: {total_colabs}\n"
-    # Por classe
     todas_classes = defaultdict(int)
     for classes in classes_info.values():
         for classe, qtd in classes.items():
@@ -511,7 +506,6 @@ def formatar_resumo_geral(dados, numero_usuario, titulo_data, data_inicio=None, 
 
     texto += f"---------------------------------------------\n"
 
-    # RANKING DE SUPERVISORES POR FATURAMENTO
     supervisores_ranking = obter_supervisores_por_faturamento(projetos_usuario, data_inicio, data_fim)
     if supervisores_ranking:
         texto += f"🏆 RANKING FATURAMENTO POR SUPERVISOR\n"
@@ -528,15 +522,11 @@ def formatar_resumo_geral(dados, numero_usuario, titulo_data, data_inicio=None, 
             
             texto += f"{emoji_pos} {supervisor} - {formatar_moeda(faturado)}\n"
             posicao += 1
-    else:
-        print(f"[DEBUG] Nenhum supervisor encontrado para ranking")
 
     texto += f"-----------------------------------------------\n"
 
-    # RANKING DE PROJETOS POR FATURAMENTO
     if resumo_projetos:
         texto += f"🏆 RANKING FATURAMENTO POR PROJETO\n"
-        # Ordenar projetos por faturamento (decrescente)
         projetos_ordenados = sorted(
             resumo_projetos.items(), 
             key=lambda x: x[1]['faturado'], 
@@ -545,7 +535,7 @@ def formatar_resumo_geral(dados, numero_usuario, titulo_data, data_inicio=None, 
         
         posicao = 1
         for projeto, dados_proj in projetos_ordenados:
-            if dados_proj['faturado'] > 0:  # Só mostra projetos com faturamento
+            if dados_proj['faturado'] > 0:
                 if posicao == 1:
                     emoji_pos = "🥇"
                 elif posicao == 2:
@@ -557,37 +547,6 @@ def formatar_resumo_geral(dados, numero_usuario, titulo_data, data_inicio=None, 
                 
                 texto += f"{emoji_pos} {projeto} - {formatar_moeda(dados_proj['faturado'])}\n"
                 posicao += 1
-
-    texto += f"--------------------------------------------\n"
-
-    # NOVO: MODALIDADES POR PROJETO
-    texto += f"📊 MODALIDADES POR PROJETO\n\n"
-    
-    # Ordenar projetos por faturamento (mesmo ordem do ranking)
-    projetos_ordenados = sorted(
-        projetos_modalidade.items(), 
-        key=lambda x: sum(mod['faturado'] for mod in x[1].values()), 
-        reverse=True
-    )
-    
-    for projeto, modalidades in projetos_ordenados:
-        # Só mostra projetos com faturamento
-        total_projeto = sum(mod['faturado'] for mod in modalidades.values())
-        if total_projeto > 0:
-            texto += f"PROJETO {projeto}\n"
-            
-            # Ordenar modalidades por faturamento
-            modalidades_ordenadas = sorted(
-                modalidades.items(),
-                key=lambda x: x[1]['faturado'],
-                reverse=True
-            )
-            
-            for modalidade, dados in modalidades_ordenadas:
-                if dados['faturado'] > 0:
-                    texto += f"{modalidade}: {formatar_numero(dados['producao'])} | {formatar_moeda(dados['faturado'])}\n"
-            
-            texto += f"--------------------------------------\n"
 
     return texto.strip()
 
@@ -625,19 +584,6 @@ def formatar_resumo_detalhado(dados, numero_usuario, titulo_data):
         texto += f"💰 Faturado: {formatar_moeda(total_lider_faturado)}\n"
         texto += f"═══════════════════════════════════\n\n"
 
-    # AGRUPADO POR SERVIÇO (novo formato)
-    texto += f"***AGRUPADO POR SERVIÇO***\n"
-    for projeto, servicos in servicos_por_projeto.items():
-        texto += f"PROJETO {projeto}\n"
-        for servico, dados in servicos.items():
-            prod = formatar_numero(dados['producao'])
-            fat = formatar_moeda(dados['faturado'])
-            medida = dados['medida']
-            texto += f"{servico}\n"
-            texto += f"📊 Produção: {prod} {medida}\n"
-            texto += f"💰 Faturado: {fat}\n"
-            texto += "_____________________\n"
-        texto += "\n"
     return texto.strip()
 
 def baixar_e_converter_audio(url_audio):
@@ -695,7 +641,96 @@ def transcrever_com_speech_recognition(caminho_audio):
 def processar_comando_audio(texto):
     texto = texto.lower().strip()
     
-    # CORRIGIDO: Regex mais flexível para períodos
+    # Padrão para projeto específico com data numérica
+    padrao_projeto_numerico = r'(?:produção|producao|faturamento)\s+projeto\s+(\d+)\s+(\d{1,2})[/](\d{1,2})(?:[/](\d{4}))?\s*(?:a|até)\s*(\d{1,2})[/](\d{1,2})(?:[/](\d{4}))?'
+    match_projeto_numerico = re.search(padrao_projeto_numerico, texto)
+    
+    if match_projeto_numerico:
+        projeto = match_projeto_numerico.group(1)
+        dia_inicio = match_projeto_numerico.group(2).zfill(2)
+        mes_inicio = match_projeto_numerico.group(3).zfill(2)
+        ano_inicio = match_projeto_numerico.group(4) if match_projeto_numerico.group(4) else str(datetime.now().year)
+        dia_fim = match_projeto_numerico.group(5).zfill(2)
+        mes_fim = match_projeto_numerico.group(6).zfill(2)
+        ano_fim = match_projeto_numerico.group(7) if match_projeto_numerico.group(7) else str(datetime.now().year)
+        
+        data_inicio = f"{dia_inicio}/{mes_inicio}/{ano_inicio}"
+        data_fim = f"{dia_fim}/{mes_fim}/{ano_fim}"
+        
+        return "projeto_periodo", f"{projeto}|{data_inicio} A {data_fim}"
+    
+    # Padrão para projeto específico com período
+    padrao_projeto_periodo = r'(?:produção|producao|faturamento)\s+projeto\s+(\d+)\s+(?:dia\s+)?(\d{1,2})\s*(?:a|até|de)\s*(\d{1,2})\s*de\s*(julho|jul|janeiro|jan|fevereiro|fev|março|mar|abril|abr|maio|mai|junho|jun|agosto|ago|setembro|set|outubro|out|novembro|nov|dezembro|dez)'
+    match_projeto_periodo = re.search(padrao_projeto_periodo, texto)
+    
+    if match_projeto_periodo:
+        projeto = match_projeto_periodo.group(1)
+        dia_inicio = match_projeto_periodo.group(2).zfill(2)
+        dia_fim = match_projeto_periodo.group(3).zfill(2)
+        mes_nome = match_projeto_periodo.group(4).lower()
+        
+        meses = {
+            'janeiro': '01', 'jan': '01', 'fevereiro': '02', 'fev': '02', 
+            'março': '03', 'mar': '03', 'abril': '04', 'abr': '04',
+            'maio': '05', 'mai': '05', 'junho': '06', 'jun': '06',
+            'julho': '07', 'jul': '07', 'agosto': '08', 'ago': '08',
+            'setembro': '09', 'set': '09', 'outubro': '10', 'out': '10',
+            'novembro': '11', 'nov': '11', 'dezembro': '12', 'dez': '12'
+        }
+        
+        mes = meses.get(mes_nome, '07')
+        ano = str(datetime.now().year)
+        
+        data_inicio = f"{dia_inicio}/{mes}/{ano}"
+        data_fim = f"{dia_fim}/{mes}/{ano}"
+        
+        return "projeto_periodo", f"{projeto}|{data_inicio} A {data_fim}"
+    
+    # Padrão para projeto específico hoje
+    padrao_projeto_hoje = r'(?:produção|producao|faturamento)\s+projeto\s+(\d+)\s+(?:do\s+dia|hoje)'
+    match_projeto_hoje = re.search(padrao_projeto_hoje, texto)
+    
+    if match_projeto_hoje:
+        projeto = match_projeto_hoje.group(1)
+        return "projeto_hoje", projeto
+    
+    # Padrão para projeto específico em data específica
+    padrao_projeto_data = r'(?:produção|producao|faturamento)\s+projeto\s+(\d+)\s+(?:dia\s+)?(\d{1,2})\s*de\s*(julho|jul|janeiro|jan|fevereiro|fev|março|mar|abril|abr|maio|mai|junho|jun|agosto|ago|setembro|set|outubro|out|novembro|nov|dezembro|dez)'
+    match_projeto_data = re.search(padrao_projeto_data, texto)
+    
+    if match_projeto_data:
+        projeto = match_projeto_data.group(1)
+        dia = match_projeto_data.group(2).zfill(2)
+        mes_nome = match_projeto_data.group(3).lower()
+        
+        meses = {
+            'janeiro': '01', 'jan': '01', 'fevereiro': '02', 'fev': '02', 
+            'março': '03', 'mar': '03', 'abril': '04', 'abr': '04',
+            'maio': '05', 'mai': '05', 'junho': '06', 'jun': '06',
+            'julho': '07', 'jul': '07', 'agosto': '08', 'ago': '08',
+            'setembro': '09', 'set': '09', 'outubro': '10', 'out': '10',
+            'novembro': '11', 'nov': '11', 'dezembro': '12', 'dez': '12'
+        }
+        
+        mes = meses.get(mes_nome, '07')
+        ano = str(datetime.now().year)
+        data_br = f"{dia}/{mes}/{ano}"
+        
+        return "projeto_periodo", f"{projeto}|{data_br} A {data_br}"
+    
+    # Padrão para "do dia" com data específica (TODOS OS PROJETOS)
+    padrao_dia_especifico = r'(?:produção|producao|faturamento)\s+do\s+dia\s+(\d{1,2})[/](\d{1,2})(?:[/](\d{4}))?'
+    match_dia_especifico = re.search(padrao_dia_especifico, texto)
+    
+    if match_dia_especifico:
+        dia = match_dia_especifico.group(1).zfill(2)
+        mes = match_dia_especifico.group(2).zfill(2)
+        ano = match_dia_especifico.group(3) if match_dia_especifico.group(3) else str(datetime.now().year)
+        data_br = f"{dia}/{mes}/{ano}"
+        periodo = f"{data_br} A {data_br}"
+        return "periodo", periodo
+    
+    # Padrões originais (sem projeto específico)
     padrao_periodo = r'(\d{1,2})\s*(?:a|até|de)\s*(\d{1,2})\s*de\s*(julho|jul|janeiro|jan|fevereiro|fev|março|mar|abril|abr|maio|mai|junho|jun|agosto|ago|setembro|set|outubro|out|novembro|nov|dezembro|dez)'
     match_periodo = re.search(padrao_periodo, texto)
     
@@ -704,23 +739,16 @@ def processar_comando_audio(texto):
         dia_fim = match_periodo.group(2).zfill(2)
         mes_nome = match_periodo.group(3).lower()
         
-        # Mapeamento de meses
         meses = {
-            'janeiro': '01', 'jan': '01',
-            'fevereiro': '02', 'fev': '02', 
-            'março': '03', 'mar': '03',
-            'abril': '04', 'abr': '04',
-            'maio': '05', 'mai': '05',
-            'junho': '06', 'jun': '06',
-            'julho': '07', 'jul': '07',
-            'agosto': '08', 'ago': '08',
-            'setembro': '09', 'set': '09',
-            'outubro': '10', 'out': '10',
-            'novembro': '11', 'nov': '11',
-            'dezembro': '12', 'dez': '12'
+            'janeiro': '01', 'jan': '01', 'fevereiro': '02', 'fev': '02', 
+            'março': '03', 'mar': '03', 'abril': '04', 'abr': '04',
+            'maio': '05', 'mai': '05', 'junho': '06', 'jun': '06',
+            'julho': '07', 'jul': '07', 'agosto': '08', 'ago': '08',
+            'setembro': '09', 'set': '09', 'outubro': '10', 'out': '10',
+            'novembro': '11', 'nov': '11', 'dezembro': '12', 'dez': '12'
         }
         
-        mes = meses.get(mes_nome, '07')  # Default julho
+        mes = meses.get(mes_nome, '07')
         ano = str(datetime.now().year)
         
         data_inicio = f"{dia_inicio}/{mes}/{ano}"
@@ -728,24 +756,29 @@ def processar_comando_audio(texto):
         
         return "periodo", f"{data_inicio} A {data_fim}"
     
-    # Padrão original para datas numéricas
-    padrao_data = r'(\d{1,2})[/-](\d{1,2})(?:[/-](\d{4}))?'
+    # Padrão original para datas numéricas (TODOS OS PROJETOS)
+    padrao_data = r'(\d{1,2})[/-](\d{1,2})(?:[/-](\d{4}))?\s*(?:a|até)\s*(\d{1,2})[/-](\d{1,2})(?:[/-](\d{4}))?'
     match_data = re.search(padrao_data, texto)
     if match_data:
-        dia = match_data.group(1).zfill(2)
-        mes = match_data.group(2).zfill(2)
-        ano = match_data.group(3) if match_data.group(3) else str(datetime.now().year)
-        data_br = f"{dia}/{mes}/{ano}"
-        periodo = f"{data_br} A {data_br}"
+        dia_inicio = match_data.group(1).zfill(2)
+        mes_inicio = match_data.group(2).zfill(2)
+        ano_inicio = match_data.group(3) if match_data.group(3) else str(datetime.now().year)
+        dia_fim = match_data.group(4).zfill(2)
+        mes_fim = match_data.group(5).zfill(2)
+        ano_fim = match_data.group(6) if match_data.group(6) else str(datetime.now().year)
+        
+        data_inicio = f"{dia_inicio}/{mes_inicio}/{ano_inicio}"
+        data_fim = f"{dia_fim}/{mes_fim}/{ano_fim}"
+        periodo = f"{data_inicio} A {data_fim}"
         return "periodo", periodo
     
-    # Padrão antigo para um dia específico (mantido para compatibilidade)
-    padrao_mes_extenso = r'(\d{1,2})\s*de\s*(julho|jul)'
-    match_mes = re.search(padrao_mes_extenso, texto)
-    if match_mes:
-        dia = match_mes.group(1).zfill(2)
-        mes = "07"
-        ano = str(datetime.now().year)
+    # Padrão para data única numérica (TODOS OS PROJETOS)
+    padrao_data_unica = r'(\d{1,2})[/-](\d{1,2})(?:[/-](\d{4}))?'
+    match_data_unica = re.search(padrao_data_unica, texto)
+    if match_data_unica:
+        dia = match_data_unica.group(1).zfill(2)
+        mes = match_data_unica.group(2).zfill(2)
+        ano = match_data_unica.group(3) if match_data_unica.group(3) else str(datetime.now().year)
         data_br = f"{dia}/{mes}/{ano}"
         periodo = f"{data_br} A {data_br}"
         return "periodo", periodo
@@ -806,19 +839,23 @@ Escolha uma opção digitando o número:
 *1* - 📊 PRODUÇÃO HOJE
 *2* - 💰 FATURADO HOJE
 *3* - 📅 SELECIONAR PERÍODO
-🎤 *COMANDOS POR VOZ:*
-• "produção do dia"
-• "produção do dia 30 de julho"
-• "produção de 10 a 15 de julho"
+
+🎤 *COMANDOS GERAIS (todos os projetos):*
+• "produção do dia" → hoje
+• "produção do dia 01/08" → data específica
+• "produção de 01/08 a 03/08" → período
+
+🎯 *COMANDOS POR PROJETO ESPECÍFICO:*
+• "produção projeto 202 do dia" → projeto hoje
+• "produção projeto 202 01/08 a 03/08" → projeto período
+• "faturamento projeto 150 dia 15 de agosto"
 """
     return enviar_mensagem(numero, menu_texto)
 
 # ================== HEALTH CHECK ENDPOINT ==================
 @app.route('/health', methods=['GET'])
 def health_check():
-    """Endpoint para verificação de saúde do serviço"""
     try:
-        # Testa conexão com banco
         conn = conectar_db()
         cursor = conn.cursor()
         cursor.execute("SELECT 1")
@@ -842,7 +879,6 @@ def health_check():
 
 @app.route('/', methods=['GET'])
 def home():
-    """Endpoint raiz"""
     return {
         'name': 'Bot WhatsApp Sistema de Produção',
         'status': 'running',
@@ -862,21 +898,21 @@ def webhook():
         print(f"[DEBUG] Número: {numero}")
         print(f"[DEBUG] Tipo: {'AUDIO' if 'audio' in dados else 'TEXTO'}")
         
-        # PRIMEIRO: Verificação de autorização
+        # Verificação de autorização
         if not verificar_autorizacao(numero):
             print(f"[DEBUG] Usuário não autorizado: {numero}")
             enviar_mensagem_nao_autorizado(numero)
             return '', 200
         
-        # SEGUNDO: Controle de spam RIGOROSO - PRIMEIRA BARREIRA
+        # Controle de spam
         if not pode_processar_comando(numero):
             print(f"[DEBUG] ❌ SPAM BLOQUEADO para {numero}")
             return '', 200
         
-        # TERCEIRO: Gerar hash único
+        # Gerar hash único
         hash_mensagem = gerar_hash_mensagem(dados, numero)
         
-        # QUARTO: Verificar duplicação - SEGUNDA BARREIRA
+        # Verificar duplicação
         if ja_processou_mensagem(hash_mensagem):
             print(f"[DEBUG] ❌ MENSAGEM DUPLICADA: {hash_mensagem[:8]}")
             return '', 200
@@ -888,37 +924,69 @@ def webhook():
             print(f"[DEBUG] Iniciando processamento de ÁUDIO")
             url_audio = dados["audio"].get("audioUrl")
             if not url_audio:
-                print(f"[DEBUG] URL de áudio não encontrada")
                 return '', 200
                 
             caminho_wav = baixar_e_converter_audio(url_audio)
             if not caminho_wav:
-                print(f"[DEBUG] Falha na conversão do áudio")
                 return '', 200
                 
             texto_transcrito = transcrever_com_speech_recognition(caminho_wav)
             if not texto_transcrito:
-                print(f"[DEBUG] Falha na transcrição")
                 return '', 200
                 
             print(f"[DEBUG] Áudio transcrito: '{texto_transcrito}'")
             comando, parametro = processar_comando_audio(texto_transcrito)
             
             if comando == "producao_hoje":
-                print(f"[DEBUG] Executando comando: PRODUÇÃO HOJE")
                 dados_prod = obter_dados_detalhados_hoje(numero)
                 data_hoje = datetime.today().strftime('%d/%m/%Y')
                 resumo = formatar_resumo_geral(dados_prod, numero, f"PRODUÇÃO {data_hoje}", None, None)
                 detalhado = formatar_resumo_detalhado(dados_prod, numero, f"PRODUÇÃO {data_hoje}")
                 
-                print(f"[DEBUG] Enviando mensagem 1/2 - RESUMO")
                 enviar_mensagem(numero, f"🎤 Ouvi: \"{texto_transcrito}\"\n\n{resumo}")
                 time.sleep(4)
-                print(f"[DEBUG] Enviando mensagem 2/2 - DETALHADO")
                 enviar_mensagem(numero, detalhado)
                 
+            elif comando == "projeto_hoje" and parametro:
+                projeto_id = parametro
+                dados_prod = obter_dados_detalhados_hoje(numero, projeto_id)
+                data_hoje = datetime.today().strftime('%d/%m/%Y')
+                
+                if dados_prod:
+                    resumo = formatar_resumo_geral(dados_prod, numero, f"PRODUÇÃO PROJETO {projeto_id} - {data_hoje}", None, None)
+                    detalhado = formatar_resumo_detalhado(dados_prod, numero, f"PRODUÇÃO PROJETO {projeto_id} - {data_hoje}")
+                    
+                    enviar_mensagem(numero, f"🎤 Ouvi: \"{texto_transcrito}\"\n\n{resumo}")
+                    time.sleep(4)
+                    enviar_mensagem(numero, detalhado)
+                else:
+                    enviar_mensagem(numero, f"🎤 Ouvi: \"{texto_transcrito}\"\n\n❌ Nenhum dado encontrado para o projeto {projeto_id} hoje, ou você não tem acesso a este projeto.")
+                
+            elif comando == "projeto_periodo" and parametro:
+                partes = parametro.split("|")
+                projeto_id = partes[0]
+                periodo_str = partes[1]
+                
+                data_inicio, data_fim = processar_periodo(periodo_str)
+                
+                if data_inicio and data_fim:
+                    dados_periodo = obter_dados_detalhados_periodo(data_inicio, data_fim, numero, projeto_id)
+                    data_inicio_br = datetime.strptime(data_inicio, '%Y-%m-%d').strftime('%d/%m/%Y')
+                    data_fim_br = datetime.strptime(data_fim, '%Y-%m-%d').strftime('%d/%m/%Y')
+                    
+                    if dados_periodo:
+                        resumo = formatar_resumo_geral(dados_periodo, numero, f"PROJETO {projeto_id} - PERÍODO {data_inicio_br} a {data_fim_br}", data_inicio, data_fim)
+                        detalhado = formatar_resumo_detalhado(dados_periodo, numero, f"PROJETO {projeto_id} - PERÍODO {data_inicio_br} a {data_fim_br}")
+                        
+                        enviar_mensagem(numero, f"🎤 Ouvi: \"{texto_transcrito}\"\n\n{resumo}")
+                        time.sleep(4)
+                        enviar_mensagem(numero, detalhado)
+                    else:
+                        enviar_mensagem(numero, f"🎤 Ouvi: \"{texto_transcrito}\"\n\n❌ Nenhum dado encontrado para o projeto {projeto_id} no período informado.")
+                else:
+                    enviar_mensagem(numero, f"🎤 Ouvi: \"{texto_transcrito}\"\n\n❌ Não consegui entender a data informada.")
+                
             elif comando == "periodo" and parametro:
-                print(f"[DEBUG] Executando comando: PERÍODO - {parametro}")
                 data_inicio, data_fim = processar_periodo(parametro)
                 if data_inicio and data_fim:
                     dados_periodo = obter_dados_detalhados_periodo(data_inicio, data_fim, numero)
@@ -927,63 +995,89 @@ def webhook():
                     resumo = formatar_resumo_geral(dados_periodo, numero, f"PERÍODO {data_inicio_br} a {data_fim_br}", data_inicio, data_fim)
                     detalhado = formatar_resumo_detalhado(dados_periodo, numero, f"PERÍODO {data_inicio_br} a {data_fim_br}")
                     
-                    print(f"[DEBUG] Enviando mensagem 1/2 - RESUMO PERÍODO")
                     enviar_mensagem(numero, f"🎤 Ouvi: \"{texto_transcrito}\"\n\n{resumo}")
                     time.sleep(4)
-                    print(f"[DEBUG] Enviando mensagem 2/2 - DETALHADO PERÍODO")
                     enviar_mensagem(numero, detalhado)
                 else:
-                    print(f"[DEBUG] Erro no processamento da data")
                     enviar_mensagem(numero, f"🎤 Ouvi: \"{texto_transcrito}\"\n\n❌ Não consegui entender a data informada.")
             else:
-                print(f"[DEBUG] Comando não reconhecido: {comando}")
                 enviar_mensagem(numero, f"🎤 Ouvi: \"{texto_transcrito}\"\n\n❌ Não reconheci o comando. Envie novamente ou digite *menu*.")
         
         # PROCESSAMENTO DE TEXTO
         elif "text" in dados:
             mensagem = dados["text"]["message"].lower().strip()
             
-            # FILTRO: Ignorar mensagens de trial ou muito longas
             if ("trial" in mensagem and "favor desconsiderar" in mensagem) or len(mensagem) > 500:
-                print(f"[DEBUG] Mensagem de trial/spam ignorada")
                 return '', 200
             
             print(f"[DEBUG] Processando TEXTO: '{mensagem[:50]}...'")
             
             if mensagem in ["oi", "menu"]:
-                print(f"[DEBUG] Enviando MENU")
                 enviar_menu(numero)
                 
             elif mensagem == "1":
-                print(f"[DEBUG] Executando opção 1 - PRODUÇÃO HOJE")
                 dados_detalhados = obter_dados_detalhados_hoje(numero)
                 data_hoje = datetime.today().strftime('%d/%m/%Y')
                 resumo = formatar_resumo_geral(dados_detalhados, numero, f"PRODUÇÃO {data_hoje}", None, None)
                 detalhado = formatar_resumo_detalhado(dados_detalhados, numero, f"PRODUÇÃO {data_hoje}")
                 
-                print(f"[DEBUG] Enviando mensagem 1/2 - RESUMO")
                 enviar_mensagem(numero, resumo)
                 time.sleep(4)
-                print(f"[DEBUG] Enviando mensagem 2/2 - DETALHADO")
                 enviar_mensagem(numero, detalhado)
                 
             elif mensagem == "produção" or mensagem == "producao":
-                print(f"[DEBUG] Comando texto: PRODUÇÃO")
                 dados_detalhados = obter_dados_detalhados_hoje(numero)
                 data_hoje = datetime.today().strftime('%d/%m/%Y')
                 resumo = formatar_resumo_geral(dados_detalhados, numero, f"PRODUÇÃO {data_hoje}", None, None)
                 detalhado = formatar_resumo_detalhado(dados_detalhados, numero, f"PRODUÇÃO {data_hoje}")
                 
-                print(f"[DEBUG] Enviando mensagem 1/2 - RESUMO")
                 enviar_mensagem(numero, resumo)
                 time.sleep(4)
-                print(f"[DEBUG] Enviando mensagem 2/2 - DETALHADO")
                 enviar_mensagem(numero, detalhado)
                 
             else:
                 comando, parametro = processar_comando_audio(mensagem)
-                if comando == "periodo" and parametro:
-                    print(f"[DEBUG] Comando texto PERÍODO: {parametro}")
+                
+                if comando == "projeto_hoje" and parametro:
+                    projeto_id = parametro
+                    dados_detalhados = obter_dados_detalhados_hoje(numero, projeto_id)
+                    data_hoje = datetime.today().strftime('%d/%m/%Y')
+                    
+                    if dados_detalhados:
+                        resumo = formatar_resumo_geral(dados_detalhados, numero, f"PRODUÇÃO PROJETO {projeto_id} - {data_hoje}", None, None)
+                        detalhado = formatar_resumo_detalhado(dados_detalhados, numero, f"PRODUÇÃO PROJETO {projeto_id} - {data_hoje}")
+                        
+                        enviar_mensagem(numero, resumo)
+                        time.sleep(4)
+                        enviar_mensagem(numero, detalhado)
+                    else:
+                        enviar_mensagem(numero, f"❌ Nenhum dado encontrado para o projeto {projeto_id} hoje, ou você não tem acesso a este projeto.")
+                        
+                elif comando == "projeto_periodo" and parametro:
+                    partes = parametro.split("|")
+                    projeto_id = partes[0]
+                    periodo_str = partes[1]
+                    
+                    data_inicio, data_fim = processar_periodo(periodo_str)
+                    
+                    if data_inicio and data_fim:
+                        dados_periodo = obter_dados_detalhados_periodo(data_inicio, data_fim, numero, projeto_id)
+                        data_inicio_br = datetime.strptime(data_inicio, '%Y-%m-%d').strftime('%d/%m/%Y')
+                        data_fim_br = datetime.strptime(data_fim, '%Y-%m-%d').strftime('%d/%m/%Y')
+                        
+                        if dados_periodo:
+                            resumo = formatar_resumo_geral(dados_periodo, numero, f"PROJETO {projeto_id} - PERÍODO {data_inicio_br} a {data_fim_br}", data_inicio, data_fim)
+                            detalhado = formatar_resumo_detalhado(dados_periodo, numero, f"PROJETO {projeto_id} - PERÍODO {data_inicio_br} a {data_fim_br}")
+                            
+                            enviar_mensagem(numero, resumo)
+                            time.sleep(4)
+                            enviar_mensagem(numero, detalhado)
+                        else:
+                            enviar_mensagem(numero, f"❌ Nenhum dado encontrado para o projeto {projeto_id} no período informado.")
+                    else:
+                        enviar_mensagem(numero, "❌ Não consegui entender a data informada.")
+                        
+                elif comando == "periodo" and parametro:
                     data_inicio, data_fim = processar_periodo(parametro)
                     if data_inicio and data_fim:
                         dados_periodo = obter_dados_detalhados_periodo(data_inicio, data_fim, numero)
@@ -992,19 +1086,15 @@ def webhook():
                         resumo = formatar_resumo_geral(dados_periodo, numero, f"PERÍODO {data_inicio_br} a {data_fim_br}", data_inicio, data_fim)
                         detalhado = formatar_resumo_detalhado(dados_periodo, numero, f"PERÍODO {data_inicio_br} a {data_fim_br}")
                         
-                        print(f"[DEBUG] Enviando mensagem 1/2 - RESUMO PERÍODO")
                         enviar_mensagem(numero, resumo)
                         time.sleep(4)
-                        print(f"[DEBUG] Enviando mensagem 2/2 - DETALHADO PERÍODO")
                         enviar_mensagem(numero, detalhado)
                     else:
                         enviar_mensagem(numero, "❌ Não consegui entender a data informada.")
                 else:
-                    print(f"[DEBUG] Comando não reconhecido")
                     enviar_mensagem(numero, "❓ Não reconheci o comando. Digite *menu* para ver as opções.")
         
         print(f"[DEBUG] ✅ PROCESSAMENTO CONCLUÍDO: {hash_mensagem[:8]}")
-        print(f"[DEBUG] ========================================\n")
         return '', 200
         
     except Exception as e:
@@ -1014,7 +1104,6 @@ def webhook():
         return '', 500
 
 # ================== INICIALIZAÇÃO ==================
-# Inicialização para Gunicorn (fora do if __name__)
 try:
     print("🔧 Inicializando para Gunicorn...")
     print("🔍 Testando conexão com banco de dados...")
@@ -1036,10 +1125,9 @@ if __name__ == '__main__':
     print("🏆 NOVO: Ranking de projetos por faturamento")
     print("🏆 NOVO: Ranking de supervisores por faturamento")
     print("📅 CORRIGIDO: Processamento de períodos por voz")
+    print("🎯 NOVO: Filtros por projeto específico")
     print("🚀 RAILWAY: Configurado para deploy em produção")
-    print("🔧 CORRIGIDO: Drivers ODBC múltiplos para compatibilidade")
     
-    # Carrega cache inicial de usuários
     try:
         print("🔍 Testando conexão inicial com banco...")
         cache_usuarios = buscar_usuarios_autorizados()
