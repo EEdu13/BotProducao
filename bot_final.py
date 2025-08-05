@@ -641,7 +641,21 @@ def transcrever_com_speech_recognition(caminho_audio):
 def processar_comando_audio(texto):
     texto = texto.lower().strip()
     
-    # Padrão para projeto específico com data numérica
+    # NOVO: Padrão para projeto específico com data numérica SIMPLES
+    padrao_projeto_data_simples = r'(?:produção|producao|faturamento)\s+projeto\s+(\d+)\s+(\d{1,2})[/](\d{1,2})(?:[/](\d{4}))?'
+    match_projeto_data_simples = re.search(padrao_projeto_data_simples, texto)
+    
+    if match_projeto_data_simples:
+        projeto = match_projeto_data_simples.group(1)
+        dia = match_projeto_data_simples.group(2).zfill(2)
+        mes = match_projeto_data_simples.group(3).zfill(2)
+        ano = match_projeto_data_simples.group(4) if match_projeto_data_simples.group(4) else str(datetime.now().year)
+        
+        data_br = f"{dia}/{mes}/{ano}"
+        
+        return "projeto_periodo", f"{projeto}|{data_br} A {data_br}"
+    
+    # Padrão para projeto específico com data numérica (PERÍODO)
     padrao_projeto_numerico = r'(?:produção|producao|faturamento)\s+projeto\s+(\d+)\s+(\d{1,2})[/](\d{1,2})(?:[/](\d{4}))?\s*(?:a|até)\s*(\d{1,2})[/](\d{1,2})(?:[/](\d{4}))?'
     match_projeto_numerico = re.search(padrao_projeto_numerico, texto)
     
