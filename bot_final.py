@@ -676,7 +676,7 @@ def processar_comando_audio(texto):
         return "projeto_periodo", f"{projeto}|{data_br} A {data_br}"
     
     # Padrão para projeto específico com data numérica (PERÍODO)
-    padrao_projeto_numerico = r'(?:produção|producao|faturamento)\s+projeto\s+(\d+)\s+(\d{1,2})[/](\d{1,2})(?:[/](\d{4}))?\s*(?:a|até)\s*(\d{1,2})[/](\d{1,2})(?:[/](\d{4}))?'
+    padrao_projeto_numerico = r'(?:produção|producao|faturamento)\s+projeto\s+(\d+)\s+(\d{1,2})[/-](\d{1,2})(?:[/-](\d{4}))?\s*(?:a|até)\s*(\d{1,2})[/-](\d{1,2})(?:[/-](\d{4}))?'
     match_projeto_numerico = re.search(padrao_projeto_numerico, texto)
     
     if match_projeto_numerico:
@@ -686,10 +686,18 @@ def processar_comando_audio(texto):
         ano_inicio = match_projeto_numerico.group(4) if match_projeto_numerico.group(4) else str(datetime.now().year)
         dia_fim = match_projeto_numerico.group(5).zfill(2)
         mes_fim = match_projeto_numerico.group(6).zfill(2)
-        ano_fim = match_projeto_numerico.group(7) if match_projeto_numerico.group(7) else str(datetime.now().year)
+        ano_fim = match_projeto_numerico.group(7) if match_projeto_numerico.group(7) else ano_inicio
         
         data_inicio = f"{dia_inicio}/{mes_inicio}/{ano_inicio}"
         data_fim = f"{dia_fim}/{mes_fim}/{ano_fim}"
+        
+        try:
+            data_inicio_dt = datetime.strptime(data_inicio, '%d/%m/%Y')
+            data_fim_dt = datetime.strptime(data_fim, '%d/%m/%Y')
+            if data_fim_dt < data_inicio_dt:
+                return "invalido", "Data final anterior à data inicial"
+        except ValueError:
+            return "invalido", "Formato de data inválido"
         
         return "projeto_periodo", f"{projeto}|{data_inicio} A {data_fim}"
     
@@ -833,11 +841,20 @@ def processar_periodo(texto):
         try:
             data_inicio_str = match.group(1)
             data_fim_str = match.group(2)
-            data_inicio = datetime.strptime(data_inicio_str, '%d/%m/%Y').strftime('%Y-%m-%d')
-            data_fim = datetime.strptime(data_fim_str, '%d/%m/%Y').strftime('%Y-%m-%d')
+            data_inicio_dt = datetime.strptime(data_inicio_str, '%d/%m/%Y')
+            data_fim_dt = datetime.strptime(data_fim_str, '%d/%m/%Y')
+            
+            if data_fim_dt < data_inicio_dt:
+                print(f"[ERRO] Data final ({data_fim_str}) anterior à data inicial ({data_inicio_str})")
+                return None, None
+                
+            data_inicio = data_inicio_dt.strftime('%Y-%m-%d')
+            data_fim = data_fim_dt.strftime('%Y-%m-%d')
             return data_inicio, data_fim
-        except ValueError:
+        except ValueError as e:
+            print(f"[ERRO] Erro ao processar datas: {e}")
             return None, None
+    print(f"[DEBUG] Período não reconhecido: {texto}")
     return None, None
 
 def enviar_mensagem(numero, texto):
@@ -1016,9 +1033,9 @@ def webhook():
                         time.sleep(4)
                         enviar_mensagem(numero, detalhado)
                     else:
-                        enviar_mensagem(numero, f"🎤 Ouvi: \"{texto_transcrito}\"\n\n❌ Nenhum dado encontrado para o projeto {projeto_id} no período informado.")
+                        enviar_mensagem(numero, f"🎤 Ouvi: \"{texto_transcrito}\"\n\n❌ Nenhum dado encontrado para o projeto {projeto_id} no período {data_inicio_br} a {data_fim_br}, ou você não tem acesso a este projeto.")
                 else:
-                    enviar_mensagem(numero, f"🎤 Ouvi: \"{texto_transcrito}\"\n\n❌ Não consegui entender a data informada.")
+                    enviar_mensagem(numero, f"🎤 Ouvi: \"{texto_transcrito}\"\n\n❌ Não consegui entender o período informado. Use o formato DD/MM/YYYY a DD/MM/YYYY.")
                 
             elif comando == "periodo" and parametro:
                 data_inicio, data_fim = processar_periodo(parametro)
@@ -1107,9 +1124,9 @@ def webhook():
                             time.sleep(4)
                             enviar_mensagem(numero, detalhado)
                         else:
-                            enviar_mensagem(numero, f"❌ Nenhum dado encontrado para o projeto {projeto_id} no período informado.")
+                            enviar_mensagem(numero, f"❌ Nenhum dado encontrado para o projeto {projeto_id} no período {data_inicio_br} a {data_fim_br}, ou você não tem acesso a este projeto.")
                     else:
-                        enviar_mensagem(numero, "❌ Não consegui entender a data informada.")
+                        enviar_mensagem(numero, f"❌ Não consegui entender o período informado. Use o formato DD/MM/YYYY a DD/MM/YYYY.")
                         
                 elif comando == "periodo" and parametro:
                     data_inicio, data_fim = processar_periodo(parametro)
@@ -1124,7 +1141,7 @@ def webhook():
                         time.sleep(4)
                         enviar_mensagem(numero, detalhado)
                     else:
-                        enviar_mensagem(numero, "❌ Não consegui entender a data informada.")
+                        enviar_mensagem(numero, f"❌ Não consegui entender o período informado. Use o formato DD/MM/YYYY a DD/MM/YYYY.")
                 else:
                     enviar_mensagem(numero, "❓ Não reconheci o comando. Digite *menu* para ver as opções.")
         
