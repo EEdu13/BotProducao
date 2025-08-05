@@ -473,11 +473,17 @@ def formatar_moeda(valor):
 def formatar_numero(valor):
     return f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-def formatar_resumo_geral(dados, numero_usuario, titulo_data, data_inicio=None, data_fim=None):
+def formatar_resumo_geral(dados, numero_usuario, titulo_data, data_inicio=None, data_fim=None, projeto_especifico=None):
     resumo_projetos, projetos_modalidade, _, _ = agrupar_dados_completo(dados)
     nome_usuario = obter_nome_usuario(numero_usuario)
-    projetos_usuario = obter_projetos_usuario(numero_usuario)
-    classes_info = obter_colaboradores_por_classe(projetos_usuario)
+    
+    # Se projeto específico, usar só ele, senão usar todos os projetos do usuário
+    if projeto_especifico:
+        projetos_para_busca = [projeto_especifico]
+    else:
+        projetos_para_busca = obter_projetos_usuario(numero_usuario)
+    
+    classes_info = obter_colaboradores_por_classe(projetos_para_busca)
 
     texto = f"📊 {titulo_data}\n\n"
     texto += f"🎯 RESUMO GERAL - {nome_usuario}\n\n"
@@ -506,7 +512,8 @@ def formatar_resumo_geral(dados, numero_usuario, titulo_data, data_inicio=None, 
 
     texto += f"---------------------------------------------\n"
 
-    supervisores_ranking = obter_supervisores_por_faturamento(projetos_usuario, data_inicio, data_fim)
+    # CORRIGIDO: Usar projetos filtrados para supervisores
+    supervisores_ranking = obter_supervisores_por_faturamento(projetos_para_busca, data_inicio, data_fim)
     if supervisores_ranking:
         texto += f"🏆 RANKING FATURAMENTO POR SUPERVISOR\n"
         posicao = 1
@@ -584,6 +591,19 @@ def formatar_resumo_detalhado(dados, numero_usuario, titulo_data):
         texto += f"💰 Faturado: {formatar_moeda(total_lider_faturado)}\n"
         texto += f"═══════════════════════════════════\n\n"
 
+    # AGRUPADO POR SERVIÇO - CORRIGIDO: Só projetos dos dados filtrados
+    texto += f"***AGRUPADO POR SERVIÇO***\n"
+    for projeto, servicos in servicos_por_projeto.items():
+        texto += f"PROJETO {projeto}\n"
+        for servico, dados in servicos.items():
+            prod = formatar_numero(dados['producao'])
+            fat = formatar_moeda(dados['faturado'])
+            medida = dados['medida']
+            texto += f"{servico}\n"
+            texto += f"📊 Produção: {prod} {medida}\n"
+            texto += f"💰 Faturado: {fat}\n"
+            texto += "_____________________\n"
+        texto += "\n"
     return texto.strip()
 
 def baixar_e_converter_audio(url_audio):
@@ -967,7 +987,7 @@ def webhook():
                 data_hoje = datetime.today().strftime('%d/%m/%Y')
                 
                 if dados_prod:
-                    resumo = formatar_resumo_geral(dados_prod, numero, f"PRODUÇÃO PROJETO {projeto_id} - {data_hoje}", None, None)
+                    resumo = formatar_resumo_geral(dados_prod, numero, f"PRODUÇÃO PROJETO {projeto_id} - {data_hoje}", None, None, projeto_id)
                     detalhado = formatar_resumo_detalhado(dados_prod, numero, f"PRODUÇÃO PROJETO {projeto_id} - {data_hoje}")
                     
                     enviar_mensagem(numero, f"🎤 Ouvi: \"{texto_transcrito}\"\n\n{resumo}")
@@ -989,7 +1009,7 @@ def webhook():
                     data_fim_br = datetime.strptime(data_fim, '%Y-%m-%d').strftime('%d/%m/%Y')
                     
                     if dados_periodo:
-                        resumo = formatar_resumo_geral(dados_periodo, numero, f"PROJETO {projeto_id} - PERÍODO {data_inicio_br} a {data_fim_br}", data_inicio, data_fim)
+                        resumo = formatar_resumo_geral(dados_periodo, numero, f"PROJETO {projeto_id} - PERÍODO {data_inicio_br} a {data_fim_br}", data_inicio, data_fim, projeto_id)
                         detalhado = formatar_resumo_detalhado(dados_periodo, numero, f"PROJETO {projeto_id} - PERÍODO {data_inicio_br} a {data_fim_br}")
                         
                         enviar_mensagem(numero, f"🎤 Ouvi: \"{texto_transcrito}\"\n\n{resumo}")
@@ -1058,7 +1078,7 @@ def webhook():
                     data_hoje = datetime.today().strftime('%d/%m/%Y')
                     
                     if dados_detalhados:
-                        resumo = formatar_resumo_geral(dados_detalhados, numero, f"PRODUÇÃO PROJETO {projeto_id} - {data_hoje}", None, None)
+                        resumo = formatar_resumo_geral(dados_detalhados, numero, f"PRODUÇÃO PROJETO {projeto_id} - {data_hoje}", None, None, projeto_id)
                         detalhado = formatar_resumo_detalhado(dados_detalhados, numero, f"PRODUÇÃO PROJETO {projeto_id} - {data_hoje}")
                         
                         enviar_mensagem(numero, resumo)
@@ -1080,7 +1100,7 @@ def webhook():
                         data_fim_br = datetime.strptime(data_fim, '%Y-%m-%d').strftime('%d/%m/%Y')
                         
                         if dados_periodo:
-                            resumo = formatar_resumo_geral(dados_periodo, numero, f"PROJETO {projeto_id} - PERÍODO {data_inicio_br} a {data_fim_br}", data_inicio, data_fim)
+                            resumo = formatar_resumo_geral(dados_periodo, numero, f"PROJETO {projeto_id} - PERÍODO {data_inicio_br} a {data_fim_br}", data_inicio, data_fim, projeto_id)
                             detalhado = formatar_resumo_detalhado(dados_periodo, numero, f"PROJETO {projeto_id} - PERÍODO {data_inicio_br} a {data_fim_br}")
                             
                             enviar_mensagem(numero, resumo)
