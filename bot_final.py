@@ -52,7 +52,6 @@ print(f"📊 Database: {DB_DATABASE}")
 ultimo_comando = {}
 numeros_ja_notificados = set()
 mensagens_processadas = {}  # Cache para evitar reprocessamento
-INTERVALO_MINIMO = 10  # Aumentado para 10 segundos
 
 # Cache para usuários
 cache_usuarios = {}
@@ -166,44 +165,47 @@ def ja_foi_notificado(numero):
         return False
 
 def pode_processar_comando(numero):
-    """Controle rigoroso de spam por usuário"""
+    """Controle rigoroso de spam por usuário - AUMENTADO para 15 segundos"""
     agora = time.time()
     ultima_vez = ultimo_comando.get(numero, 0)
-    if agora - ultima_vez >= INTERVALO_MINIMO:
+    INTERVALO_MINIMO_NOVO = 15  # AUMENTADO de 10 para 15 segundos
+    
+    if agora - ultima_vez >= INTERVALO_MINIMO_NOVO:
         ultimo_comando[numero] = agora
-        print(f"[DEBUG] Comando liberado para {numero}")
+        print(f"[DEBUG] ✅ Comando liberado para {numero}")
         return True
     else:
-        tempo_restante = int(INTERVALO_MINIMO - (agora - ultima_vez))
-        print(f"[DEBUG] Spam bloqueado para {numero} - Aguarde {tempo_restante}s")
+        tempo_restante = int(INTERVALO_MINIMO_NOVO - (agora - ultima_vez))
+        print(f"[DEBUG] ❌ SPAM BLOQUEADO para {numero} - Aguarde {tempo_restante}s")
         return False
 
 def gerar_hash_mensagem(dados, numero):
-    """Gera hash único mais específico para cada mensagem"""
+    """Gera hash único mais específico para cada mensagem SEM timestamp para evitar duplicação"""
     import hashlib
-    timestamp_atual = str(int(time.time()))
     
     if "audio" in dados:
         audio_url = dados["audio"].get("audioUrl", "")
-        conteudo = f"AUDIO_{numero}_{audio_url}_{timestamp_atual}"
+        # REMOVIDO timestamp para evitar hashes diferentes da mesma mensagem
+        conteudo = f"AUDIO_{numero}_{audio_url}"
     elif "text" in dados:
         texto = dados["text"].get("message", "")
-        conteudo = f"TEXT_{numero}_{texto}_{timestamp_atual}"
+        # REMOVIDO timestamp para evitar hashes diferentes da mesma mensagem
+        conteudo = f"TEXT_{numero}_{texto}"
     else:
-        conteudo = f"OTHER_{numero}_{timestamp_atual}"
+        conteudo = f"OTHER_{numero}"
     
     hash_final = hashlib.md5(conteudo.encode()).hexdigest()
     print(f"[DEBUG] Hash gerado: {hash_final[:8]} para {numero}")
     return hash_final
 
 def ja_processou_mensagem(hash_mensagem):
-    """Verifica se a mensagem já foi processada - Cache de 60 segundos"""
+    """Verifica se a mensagem já foi processada - Cache de 300 segundos (5 minutos)"""
     agora = time.time()
     
-    # Limpar mensagens antigas (mais de 60 segundos)
+    # Limpar mensagens antigas (mais de 300 segundos - 5 minutos)
     hashes_removidos = []
     for hash_msg, timestamp in list(mensagens_processadas.items()):
-        if agora - timestamp > 60:
+        if agora - timestamp > 300:  # AUMENTADO de 60 para 300 segundos
             del mensagens_processadas[hash_msg]
             hashes_removidos.append(hash_msg[:8])
     
@@ -212,12 +214,12 @@ def ja_processou_mensagem(hash_mensagem):
     
     # Verificar se já processou
     if hash_mensagem in mensagens_processadas:
-        print(f"[DEBUG] Hash duplicado encontrado: {hash_mensagem[:8]}")
+        print(f"[DEBUG] ❌ MENSAGEM JÁ PROCESSADA: {hash_mensagem[:8]} - IGNORANDO!")
         return True
     
     # Marcar como processada
     mensagens_processadas[hash_mensagem] = agora
-    print(f"[DEBUG] Hash registrado: {hash_mensagem[:8]}")
+    print(f"[DEBUG] ✅ Hash registrado: {hash_mensagem[:8]}")
     return False
 
 def obter_dados_detalhados_hoje(numero_usuario, projeto_especifico=None):
@@ -661,8 +663,61 @@ def transcrever_com_speech_recognition(caminho_audio):
 def processar_comando_audio(texto):
     texto = texto.lower().strip()
     
+    # NOVO PADRÃO CORRIGIDO: "produção do projeto X do dia Y a Z de mês"
+    padrao_projeto_periodo_completo = r'(?:produção|producao|faturamento)\s+(?:do\s+)?projeto\s+(\d+)\s+(?:do\s+)?dia\s+(\d{1,2})\s*(?:a|até)\s*(\d{1,2})\s*de\s*(julho|jul|janeiro|jan|fevereiro|fev|março|mar|abril|abr|maio|mai|junho|jun|agosto|ago|setembro|set|outubro|out|novembro|nov|dezembro|dez)'
+    match_projeto_periodo_completo = re.search(padrao_projeto_periodo_completo, texto)
+    
+    if match_projeto_periodo_completo:
+        projeto = match_projeto_periodo_completo.group(1)
+        dia_inicio = match_projeto_periodo_completo.group(2).zfill(2)
+        dia_fim = match_projeto_periodo_completo.group(3).zfill(2)
+        mes_nome = match_projeto_periodo_completo.group(4).lower()
+        
+        meses = {
+            'janeiro': '01', 'jan': '01', 'fevereiro': '02', 'fev': '02', 
+            'março': '03', 'mar': '03', 'abril': '04', 'abr': '04',
+            'maio': '05', 'mai': '05', 'junho': '06', 'jun': '06',
+            'julho': '07', 'jul': '07', 'agosto': '08', 'ago': '08',
+            'setembro': '09', 'set': '09', 'outubro': '10', 'out': '10',
+            'novembro': '11', 'nov': '11', 'dezembro': '12', 'dez': '12'
+        }
+        
+        mes = meses.get(mes_nome, '07')
+        ano = str(datetime.now().year)
+        
+        data_inicio = f"{dia_inicio}/{mes}/{ano}"
+        data_fim = f"{dia_fim}/{mes}/{ano}"
+        
+        print(f"[DEBUG] ✅ PROJETO PERÍODO DETECTADO: Projeto {projeto}, {data_inicio} a {data_fim}")
+        return "projeto_periodo", f"{projeto}|{data_inicio} A {data_fim}"
+    
+    # PADRÃO CORRIGIDO: "produção do projeto X dia Y de mês" (data única)
+    padrao_projeto_data_unica = r'(?:produção|producao|faturamento)\s+(?:do\s+)?projeto\s+(\d+)\s+(?:do\s+)?dia\s+(\d{1,2})\s*de\s*(julho|jul|janeiro|jan|fevereiro|fev|março|mar|abril|abr|maio|mai|junho|jun|agosto|ago|setembro|set|outubro|out|novembro|nov|dezembro|dez)'
+    match_projeto_data_unica = re.search(padrao_projeto_data_unica, texto)
+    
+    if match_projeto_data_unica:
+        projeto = match_projeto_data_unica.group(1)
+        dia = match_projeto_data_unica.group(2).zfill(2)
+        mes_nome = match_projeto_data_unica.group(3).lower()
+        
+        meses = {
+            'janeiro': '01', 'jan': '01', 'fevereiro': '02', 'fev': '02', 
+            'março': '03', 'mar': '03', 'abril': '04', 'abr': '04',
+            'maio': '05', 'mai': '05', 'junho': '06', 'jun': '06',
+            'julho': '07', 'jul': '07', 'agosto': '08', 'ago': '08',
+            'setembro': '09', 'set': '09', 'outubro': '10', 'out': '10',
+            'novembro': '11', 'nov': '11', 'dezembro': '12', 'dez': '12'
+        }
+        
+        mes = meses.get(mes_nome, '07')
+        ano = str(datetime.now().year)
+        data_br = f"{dia}/{mes}/{ano}"
+        
+        print(f"[DEBUG] ✅ PROJETO DATA ÚNICA DETECTADO: Projeto {projeto}, {data_br}")
+        return "projeto_periodo", f"{projeto}|{data_br} A {data_br}"
+    
     # NOVO: Padrão para projeto específico com data numérica SIMPLES
-    padrao_projeto_data_simples = r'(?:produção|producao|faturamento)\s+projeto\s+(\d+)\s+(\d{1,2})[/](\d{1,2})(?:[/](\d{4}))?'
+    padrao_projeto_data_simples = r'(?:produção|producao|faturamento)\s+(?:do\s+)?projeto\s+(\d+)\s+(\d{1,2})[/](\d{1,2})(?:[/](\d{4}))?'
     match_projeto_data_simples = re.search(padrao_projeto_data_simples, texto)
     
     if match_projeto_data_simples:
@@ -673,10 +728,11 @@ def processar_comando_audio(texto):
         
         data_br = f"{dia}/{mes}/{ano}"
         
+        print(f"[DEBUG] ✅ PROJETO DATA NUMÉRICA DETECTADO: Projeto {projeto}, {data_br}")
         return "projeto_periodo", f"{projeto}|{data_br} A {data_br}"
     
     # Padrão para projeto específico com data numérica (PERÍODO)
-    padrao_projeto_numerico = r'(?:produção|producao|faturamento)\s+projeto\s+(\d+)\s+(\d{1,2})[/-](\d{1,2})(?:[/-](\d{4}))?\s*(?:a|até)\s*(\d{1,2})[/-](\d{1,2})(?:[/-](\d{4}))?'
+    padrao_projeto_numerico = r'(?:produção|producao|faturamento)\s+(?:do\s+)?projeto\s+(\d+)\s+(\d{1,2})[/-](\d{1,2})(?:[/-](\d{4}))?\s*(?:a|até)\s*(\d{1,2})[/-](\d{1,2})(?:[/-](\d{4}))?'
     match_projeto_numerico = re.search(padrao_projeto_numerico, texto)
     
     if match_projeto_numerico:
@@ -702,7 +758,7 @@ def processar_comando_audio(texto):
         return "projeto_periodo", f"{projeto}|{data_inicio} A {data_fim}"
     
     # Padrão para projeto específico com período
-    padrao_projeto_periodo = r'(?:produção|producao|faturamento)\s+projeto\s+(\d+)\s+(?:dia\s+)?(\d{1,2})\s*(?:a|até|de)\s*(\d{1,2})\s*de\s*(julho|jul|janeiro|jan|fevereiro|fev|março|mar|abril|abr|maio|mai|junho|jun|agosto|ago|setembro|set|outubro|out|novembro|nov|dezembro|dez)'
+    padrao_projeto_periodo = r'(?:produção|producao|faturamento)\s+(?:do\s+)?projeto\s+(\d+)\s+(?:dia\s+)?(\d{1,2})\s*(?:a|até|de)\s*(\d{1,2})\s*de\s*(julho|jul|janeiro|jan|fevereiro|fev|março|mar|abril|abr|maio|mai|junho|jun|agosto|ago|setembro|set|outubro|out|novembro|nov|dezembro|dez)'
     match_projeto_periodo = re.search(padrao_projeto_periodo, texto)
     
     if match_projeto_periodo:
@@ -729,7 +785,7 @@ def processar_comando_audio(texto):
         return "projeto_periodo", f"{projeto}|{data_inicio} A {data_fim}"
     
     # Padrão para projeto específico hoje
-    padrao_projeto_hoje = r'(?:produção|producao|faturamento)\s+projeto\s+(\d+)\s+(?:do\s+dia|hoje)'
+    padrao_projeto_hoje = r'(?:produção|producao|faturamento)\s+(?:do\s+)?projeto\s+(\d+)\s+(?:do\s+dia|hoje)'
     match_projeto_hoje = re.search(padrao_projeto_hoje, texto)
     
     if match_projeto_hoje:
@@ -737,7 +793,7 @@ def processar_comando_audio(texto):
         return "projeto_hoje", projeto
     
     # Padrão para projeto específico em data específica
-    padrao_projeto_data = r'(?:produção|producao|faturamento)\s+projeto\s+(\d+)\s+(?:dia\s+)?(\d{1,2})\s*de\s*(julho|jul|janeiro|jan|fevereiro|fev|março|mar|abril|abr|maio|mai|junho|jun|agosto|ago|setembro|set|outubro|out|novembro|nov|dezembro|dez)'
+    padrao_projeto_data = r'(?:produção|producao|faturamento)\s+(?:do\s+)?projeto\s+(\d+)\s+(?:dia\s+)?(\d{1,2})\s*de\s*(julho|jul|janeiro|jan|fevereiro|fev|março|mar|abril|abr|maio|mai|junho|jun|agosto|ago|setembro|set|outubro|out|novembro|nov|dezembro|dez)'
     match_projeto_data = re.search(padrao_projeto_data, texto)
     
     if match_projeto_data:
@@ -870,6 +926,36 @@ def enviar_mensagem(numero, texto):
         print(f"[ERRO] Erro ao enviar mensagem: {e}")
         return None
 
+def enviar_resposta_completa(numero, resumo, detalhado, texto_transcrito=None):
+    """Envia resposta completa com controle para evitar duplicação"""
+    try:
+        if texto_transcrito:
+            mensagem_inicial = f"🎤 Ouvi: \"{texto_transcrito}\"\n\n{resumo}"
+        else:
+            mensagem_inicial = resumo
+            
+        # Enviar mensagem inicial
+        resposta1 = enviar_mensagem(numero, mensagem_inicial)
+        if not resposta1 or resposta1.status_code != 200:
+            print(f"[ERRO] Falha ao enviar primeira mensagem para {numero}")
+            return False
+            
+        # Aguardar antes de enviar a segunda
+        time.sleep(5)  # AUMENTADO de 4 para 5 segundos
+        
+        # Enviar detalhado
+        resposta2 = enviar_mensagem(numero, detalhado)
+        if not resposta2 or resposta2.status_code != 200:
+            print(f"[ERRO] Falha ao enviar segunda mensagem para {numero}")
+            return False
+            
+        print(f"[DEBUG] ✅ Resposta completa enviada para {numero}")
+        return True
+        
+    except Exception as e:
+        print(f"[ERRO] Erro ao enviar resposta completa: {e}")
+        return False
+
 def enviar_mensagem_nao_autorizado(numero):
     if ja_foi_notificado(numero):
         return
@@ -994,9 +1080,7 @@ def webhook():
                 resumo = formatar_resumo_geral(dados_prod, numero, f"PRODUÇÃO {data_hoje}", None, None)
                 detalhado = formatar_resumo_detalhado(dados_prod, numero, f"PRODUÇÃO {data_hoje}")
                 
-                enviar_mensagem(numero, f"🎤 Ouvi: \"{texto_transcrito}\"\n\n{resumo}")
-                time.sleep(4)
-                enviar_mensagem(numero, detalhado)
+                enviar_resposta_completa(numero, resumo, detalhado, texto_transcrito)
                 
             elif comando == "projeto_hoje" and parametro:
                 projeto_id = parametro
@@ -1007,9 +1091,7 @@ def webhook():
                     resumo = formatar_resumo_geral(dados_prod, numero, f"PRODUÇÃO PROJETO {projeto_id} - {data_hoje}", None, None, projeto_id)
                     detalhado = formatar_resumo_detalhado(dados_prod, numero, f"PRODUÇÃO PROJETO {projeto_id} - {data_hoje}")
                     
-                    enviar_mensagem(numero, f"🎤 Ouvi: \"{texto_transcrito}\"\n\n{resumo}")
-                    time.sleep(4)
-                    enviar_mensagem(numero, detalhado)
+                    enviar_resposta_completa(numero, resumo, detalhado, texto_transcrito)
                 else:
                     enviar_mensagem(numero, f"🎤 Ouvi: \"{texto_transcrito}\"\n\n❌ Nenhum dado encontrado para o projeto {projeto_id} hoje, ou você não tem acesso a este projeto.")
                 
@@ -1029,9 +1111,7 @@ def webhook():
                         resumo = formatar_resumo_geral(dados_periodo, numero, f"PROJETO {projeto_id} - PERÍODO {data_inicio_br} a {data_fim_br}", data_inicio, data_fim, projeto_id)
                         detalhado = formatar_resumo_detalhado(dados_periodo, numero, f"PROJETO {projeto_id} - PERÍODO {data_inicio_br} a {data_fim_br}")
                         
-                        enviar_mensagem(numero, f"🎤 Ouvi: \"{texto_transcrito}\"\n\n{resumo}")
-                        time.sleep(4)
-                        enviar_mensagem(numero, detalhado)
+                        enviar_resposta_completa(numero, resumo, detalhado, texto_transcrito)
                     else:
                         enviar_mensagem(numero, f"🎤 Ouvi: \"{texto_transcrito}\"\n\n❌ Nenhum dado encontrado para o projeto {projeto_id} no período {data_inicio_br} a {data_fim_br}, ou você não tem acesso a este projeto.")
                 else:
@@ -1046,15 +1126,12 @@ def webhook():
                     resumo = formatar_resumo_geral(dados_periodo, numero, f"PERÍODO {data_inicio_br} a {data_fim_br}", data_inicio, data_fim)
                     detalhado = formatar_resumo_detalhado(dados_periodo, numero, f"PERÍODO {data_inicio_br} a {data_fim_br}")
                     
-                    enviar_mensagem(numero, f"🎤 Ouvi: \"{texto_transcrito}\"\n\n{resumo}")
-                    time.sleep(4)
-                    enviar_mensagem(numero, detalhado)
+                    enviar_resposta_completa(numero, resumo, detalhado, texto_transcrito)
                 else:
                     enviar_mensagem(numero, f"🎤 Ouvi: \"{texto_transcrito}\"\n\n❌ Não consegui entender a data informada.")
             else:
                 enviar_mensagem(numero, f"🎤 Ouvi: \"{texto_transcrito}\"\n\n❌ Não reconheci o comando. Envie novamente ou digite *menu*.")
-        
-        # PROCESSAMENTO DE TEXTO
+                # PROCESSAMENTO DE TEXTO
         elif "text" in dados:
             mensagem = dados["text"]["message"].lower().strip()
             
@@ -1072,9 +1149,7 @@ def webhook():
                 resumo = formatar_resumo_geral(dados_detalhados, numero, f"PRODUÇÃO {data_hoje}", None, None)
                 detalhado = formatar_resumo_detalhado(dados_detalhados, numero, f"PRODUÇÃO {data_hoje}")
                 
-                enviar_mensagem(numero, resumo)
-                time.sleep(4)
-                enviar_mensagem(numero, detalhado)
+                enviar_resposta_completa(numero, resumo, detalhado)
                 
             elif mensagem == "produção" or mensagem == "producao":
                 dados_detalhados = obter_dados_detalhados_hoje(numero)
@@ -1082,9 +1157,7 @@ def webhook():
                 resumo = formatar_resumo_geral(dados_detalhados, numero, f"PRODUÇÃO {data_hoje}", None, None)
                 detalhado = formatar_resumo_detalhado(dados_detalhados, numero, f"PRODUÇÃO {data_hoje}")
                 
-                enviar_mensagem(numero, resumo)
-                time.sleep(4)
-                enviar_mensagem(numero, detalhado)
+                enviar_resposta_completa(numero, resumo, detalhado)
                 
             else:
                 comando, parametro = processar_comando_audio(mensagem)
@@ -1098,9 +1171,7 @@ def webhook():
                         resumo = formatar_resumo_geral(dados_detalhados, numero, f"PRODUÇÃO PROJETO {projeto_id} - {data_hoje}", None, None, projeto_id)
                         detalhado = formatar_resumo_detalhado(dados_detalhados, numero, f"PRODUÇÃO PROJETO {projeto_id} - {data_hoje}")
                         
-                        enviar_mensagem(numero, resumo)
-                        time.sleep(4)
-                        enviar_mensagem(numero, detalhado)
+                        enviar_resposta_completa(numero, resumo, detalhado)
                     else:
                         enviar_mensagem(numero, f"❌ Nenhum dado encontrado para o projeto {projeto_id} hoje, ou você não tem acesso a este projeto.")
                         
@@ -1120,9 +1191,7 @@ def webhook():
                             resumo = formatar_resumo_geral(dados_periodo, numero, f"PROJETO {projeto_id} - PERÍODO {data_inicio_br} a {data_fim_br}", data_inicio, data_fim, projeto_id)
                             detalhado = formatar_resumo_detalhado(dados_periodo, numero, f"PROJETO {projeto_id} - PERÍODO {data_inicio_br} a {data_fim_br}")
                             
-                            enviar_mensagem(numero, resumo)
-                            time.sleep(4)
-                            enviar_mensagem(numero, detalhado)
+                            enviar_resposta_completa(numero, resumo, detalhado)
                         else:
                             enviar_mensagem(numero, f"❌ Nenhum dado encontrado para o projeto {projeto_id} no período {data_inicio_br} a {data_fim_br}, ou você não tem acesso a este projeto.")
                     else:
@@ -1137,9 +1206,7 @@ def webhook():
                         resumo = formatar_resumo_geral(dados_periodo, numero, f"PERÍODO {data_inicio_br} a {data_fim_br}", data_inicio, data_fim)
                         detalhado = formatar_resumo_detalhado(dados_periodo, numero, f"PERÍODO {data_inicio_br} a {data_fim_br}")
                         
-                        enviar_mensagem(numero, resumo)
-                        time.sleep(4)
-                        enviar_mensagem(numero, detalhado)
+                        enviar_resposta_completa(numero, resumo, detalhado)
                     else:
                         enviar_mensagem(numero, f"❌ Não consegui entender o período informado. Use o formato DD/MM/YYYY a DD/MM/YYYY.")
                 else:
@@ -1178,6 +1245,7 @@ if __name__ == '__main__':
     print("📅 CORRIGIDO: Processamento de períodos por voz")
     print("🎯 NOVO: Filtros por projeto específico")
     print("🚀 RAILWAY: Configurado para deploy em produção")
+    print("✅ CORRIGIDO: Sistema anti-duplicação e controle de spam")
     
     try:
         print("🔍 Testando conexão inicial com banco...")
