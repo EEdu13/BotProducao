@@ -222,6 +222,105 @@ def ja_processou_mensagem(hash_mensagem):
     print(f"[DEBUG] ✅ Hash registrado: {hash_mensagem[:8]}")
     return False
 
+# ========== NOVA FUNÇÃO: VERIFICAR SE É MENSAGEM DE FRETE ==========
+def eh_mensagem_frete(dados):
+    """Verifica se a mensagem contém 'frete' - para ser ignorada pelo bot de produção"""
+    
+    # Verificar texto direto
+    if "text" in dados and isinstance(dados["text"], dict):
+        texto = dados["text"].get("message", "").lower()
+        if "frete" in texto:
+            print(f"[DEBUG] 🚚 MENSAGEM DE FRETE DETECTADA (TEXTO): ignorando")
+            return True
+    
+    # Verificar áudio (precisaria transcrever, mas vamos usar uma heurística)
+    if "audio" in dados:
+        # Por performance, vamos assumir que se tem áudio E o usuário já mandou frete recentemente,
+        # pode ser áudio de frete. Alternativamente, você pode transcrever aqui se necessário.
+        print(f"[DEBUG] 🎤 ÁUDIO DETECTADO - Verificando se é frete...")
+        
+        # OPCIONAL: Você pode transcrever o áudio aqui para verificar se contém "frete"
+        # Por agora, vamos deixar passar para não interferir no fluxo
+        
+    return False
+
+# ========== NOVA FUNÇÃO: SALVAR FRETE NO BANCO ==========
+def salvar_frete_no_banco(dados_frete, numero, texto_original=""):
+    """Salva dados de frete na tabela FRETES_TEMP (tabela já existe)"""
+    try:
+        conn = conectar_db()
+        cursor = conn.cursor()
+        
+        # Inserir frete diretamente (tabela já existe)
+        cursor.execute("""
+        INSERT INTO dbo.FRETES_TEMP 
+            (TIPO, PROJETO, SAIDA, DESTINO, KM_INICIAL, PHONE, RAW_TEXT)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
+            dados_frete["TIPO"],
+            dados_frete.get("PROJETO"),
+            dados_frete["SAIDA"], 
+            dados_frete["DESTINO"],
+            dados_frete["KM_INICIAL"],
+            numero,
+            texto_original
+        ))
+        
+        conn.commit()
+        conn.close()
+        print(f"[DEBUG] ✅ FRETE SALVO NO BANCO: {dados_frete}")
+        return True
+        
+    except Exception as e:
+        print(f"[ERRO] Falha ao salvar frete: {e}")
+        return False
+
+# ========== NOVA FUNÇÃO: PROCESSAR COMANDO DE FRETE ==========
+def processar_frete_texto(texto):
+    """Extrai dados de frete do texto usando regex"""
+    import re
+    
+    # Regex para capturar frete com projeto opcional
+    padrao_frete = re.compile(
+        r"\bfrete\b(?:\s*(?P<projeto>\d{2,6}))?.*?"
+        r"(?:\bda\b|\bdo\b|\bdas\b|\bdos\b|\bde\b)\s+(?P<origem>[^,.;\n]+?)\s+"
+        r"(?:\bpara\b|\bpra\b|\b->\b)\s+(?P<destino>[^,.;\n]+?)"
+        r".*?(?:\bkm\b|\bkm\s*inicial\b|\bquilometragem\b|\bkm\s*é\b|\bkilometro\b).*?(?P<km>\d{1,7})",
+        flags=re.IGNORECASE | re.UNICODE
+    )
+    
+    # Regex flexível (sem "km" explícito, assume número grande é KM)
+    padrao_frete_flex = re.compile(
+        r"\bfrete\b(?:\s*(?P<projeto>\d{2,6}))?.*?"
+        r"(?:\bda\b|\bdo\b|\bdas\b|\bdos\b|\bde\b)\s+(?P<origem>[^,.;\n]+?)\s+"
+        r"(?:\bpara\b|\bpra\b|\b->\b)\s+(?P<destino>[^,.;\n]+?)"
+        r".*?(?P<km>\d{4,7})\b",
+        flags=re.IGNORECASE | re.UNICODE
+    )
+    
+    def normalizar_local(s):
+        s = " ".join(s.strip().split())
+        return " ".join(p.capitalize() for p in s.split(" "))
+    
+    texto_limpo = " ".join(texto.split())
+    match = padrao_frete.search(texto_limpo) or padrao_frete_flex.search(texto_limpo)
+    
+    if not match:
+        return None
+        
+    projeto = match.group("projeto") if match.group("projeto") else None
+    origem = normalizar_local(match.group("origem"))
+    destino = normalizar_local(match.group("destino"))
+    km = int(match.group("km"))
+    
+    return {
+        "TIPO": "FRETE",
+        "PROJETO": projeto,
+        "SAIDA": origem,
+        "DESTINO": destino,
+        "KM_INICIAL": km
+    }
+
 def obter_dados_detalhados_hoje(numero_usuario, projeto_especifico=None):
     try:
         conn = conectar_db()
@@ -986,6 +1085,10 @@ Escolha uma opção digitando o número:
 • "produção projeto 202 do dia" → projeto hoje
 • "produção projeto 202 01/08 a 03/08" → projeto período
 • "faturamento projeto 150 dia 15 de agosto"
+
+🚚 *COMANDOS DE FRETE:*
+• "frete da [origem] para [destino] km [número]"
+• "frete 150 da São João para São Pedro km 50324"
 """
     return enviar_mensagem(numero, menu_texto)
 
@@ -1017,11 +1120,12 @@ def health_check():
 @app.route('/', methods=['GET'])
 def home():
     return {
-        'name': 'Bot WhatsApp Sistema de Produção',
+        'name': 'Bot WhatsApp Sistema de Produção + Frete',
         'status': 'running',
-        'version': '2.0 Railway',
+        'version': '2.1 Railway - Integrado',
         'timestamp': datetime.now().isoformat(),
-        'endpoints': ['/webhook', '/health']
+        'endpoints': ['/webhook', '/health'],
+        'features': ['Produção', 'Frete', 'Áudio STT']
     }, 200
 
 # ================== WEBHOOK PRINCIPAL ==================
@@ -1034,6 +1138,11 @@ def webhook():
         print(f"\n[DEBUG] ========== WEBHOOK RECEBIDO ==========")
         print(f"[DEBUG] Número: {numero}")
         print(f"[DEBUG] Tipo: {'AUDIO' if 'audio' in dados else 'TEXTO'}")
+        
+        # ========== NOVA VERIFICAÇÃO: IGNORAR FRETES ==========
+        if eh_mensagem_frete(dados):
+            print(f"[DEBUG] 🚚 MENSAGEM DE FRETE - IGNORADA pelo bot de produção")
+            return '', 200
         
         # Verificação de autorização
         if not verificar_autorizacao(numero):
@@ -1056,9 +1165,67 @@ def webhook():
         
         print(f"[DEBUG] ✅ PROCESSANDO: {hash_mensagem[:8]}")
         
-        # PROCESSAMENTO DE ÁUDIO
-        if "audio" in dados:
-            print(f"[DEBUG] Iniciando processamento de ÁUDIO")
+        # ========== PROCESSAMENTO DE FRETE (TEXTO E ÁUDIO) ==========
+        texto_para_frete = ""
+        
+        # Verificar se é texto
+        if "text" in dados:
+            texto_original = dados["text"].get("message", "").strip()
+            if "frete" in texto_original.lower():
+                print(f"[DEBUG] 🚚 Processando FRETE via TEXTO")
+                dados_frete = processar_frete_texto(texto_original)
+                if dados_frete:
+                    if salvar_frete_no_banco(dados_frete, numero, texto_original):
+                        resposta_frete = f"""✅ *FRETE REGISTRADO*
+🚚 Tipo: {dados_frete['TIPO']}
+🏗️ Projeto: {dados_frete.get('PROJETO') or 'N/A'}
+📍 Saída: {dados_frete['SAIDA']}
+🎯 Destino: {dados_frete['DESTINO']}
+📏 KM Inicial: {dados_frete['KM_INICIAL']}"""
+                        enviar_mensagem(numero, resposta_frete)
+                    else:
+                        enviar_mensagem(numero, "❌ Erro ao salvar frete. Tente novamente.")
+                else:
+                    enviar_mensagem(numero, "❌ Não consegui entender o frete. Use o formato: 'frete da [origem] para [destino] km [número]'")
+                return '', 200
+        
+        # Verificar se é áudio que pode conter frete
+        elif "audio" in dados:
+            print(f"[DEBUG] 🎤 Processando ÁUDIO - verificando se é frete")
+            url_audio = dados["audio"].get("audioUrl")
+            if url_audio:
+                caminho_wav = baixar_e_converter_audio(url_audio)
+                if caminho_wav:
+                    texto_transcrito = transcrever_com_speech_recognition(caminho_wav)
+                    if texto_transcrito:
+                        print(f"[DEBUG] Áudio transcrito: '{texto_transcrito}'")
+                        
+                        # Verificar se contém "frete"
+                        if "frete" in texto_transcrito.lower():
+                            print(f"[DEBUG] 🚚 FRETE detectado no áudio")
+                            dados_frete = processar_frete_texto(texto_transcrito)
+                            if dados_frete:
+                                if salvar_frete_no_banco(dados_frete, numero, texto_transcrito):
+                                    resposta_frete = f"""✅ *FRETE REGISTRADO (ÁUDIO)*
+🎤 Ouvi: "{texto_transcrito}"
+🚚 Tipo: {dados_frete['TIPO']}
+🏗️ Projeto: {dados_frete.get('PROJETO') or 'N/A'}
+📍 Saída: {dados_frete['SAIDA']}
+🎯 Destino: {dados_frete['DESTINO']}
+📏 KM Inicial: {dados_frete['KM_INICIAL']}"""
+                                    enviar_mensagem(numero, resposta_frete)
+                                else:
+                                    enviar_mensagem(numero, f"🎤 Ouvi: \"{texto_transcrito}\"\n❌ Erro ao salvar frete.")
+                            else:
+                                enviar_mensagem(numero, f"🎤 Ouvi: \"{texto_transcrito}\"\n❌ Não identifiquei um frete válido.")
+                            return '', 200
+                        else:
+                            # Não é frete, continuar com processamento normal de produção
+                            texto_para_frete = texto_transcrito
+        
+        # ========== PROCESSAMENTO DE PRODUÇÃO (AUDIO) ==========
+        if "audio" in dados and not texto_para_frete:
+            print(f"[DEBUG] Iniciando processamento de ÁUDIO para PRODUÇÃO")
             url_audio = dados["audio"].get("audioUrl")
             if not url_audio:
                 return '', 200
@@ -1070,9 +1237,13 @@ def webhook():
             texto_transcrito = transcrever_com_speech_recognition(caminho_wav)
             if not texto_transcrito:
                 return '', 200
-                
-            print(f"[DEBUG] Áudio transcrito: '{texto_transcrito}'")
-            comando, parametro = processar_comando_audio(texto_transcrito)
+            
+            texto_para_frete = texto_transcrito
+        
+        # Se temos texto transcrito do áudio, usar ele
+        if texto_para_frete:
+            print(f"[DEBUG] Áudio transcrito: '{texto_para_frete}'")
+            comando, parametro = processar_comando_audio(texto_para_frete)
             
             if comando == "producao_hoje":
                 dados_prod = obter_dados_detalhados_hoje(numero)
@@ -1080,7 +1251,7 @@ def webhook():
                 resumo = formatar_resumo_geral(dados_prod, numero, f"PRODUÇÃO {data_hoje}", None, None)
                 detalhado = formatar_resumo_detalhado(dados_prod, numero, f"PRODUÇÃO {data_hoje}")
                 
-                enviar_resposta_completa(numero, resumo, detalhado, texto_transcrito)
+                enviar_resposta_completa(numero, resumo, detalhado, texto_para_frete)
                 
             elif comando == "projeto_hoje" and parametro:
                 projeto_id = parametro
@@ -1091,9 +1262,9 @@ def webhook():
                     resumo = formatar_resumo_geral(dados_prod, numero, f"PRODUÇÃO PROJETO {projeto_id} - {data_hoje}", None, None, projeto_id)
                     detalhado = formatar_resumo_detalhado(dados_prod, numero, f"PRODUÇÃO PROJETO {projeto_id} - {data_hoje}")
                     
-                    enviar_resposta_completa(numero, resumo, detalhado, texto_transcrito)
+                    enviar_resposta_completa(numero, resumo, detalhado, texto_para_frete)
                 else:
-                    enviar_mensagem(numero, f"🎤 Ouvi: \"{texto_transcrito}\"\n\n❌ Nenhum dado encontrado para o projeto {projeto_id} hoje, ou você não tem acesso a este projeto.")
+                    enviar_mensagem(numero, f"🎤 Ouvi: \"{texto_para_frete}\"\n\n❌ Nenhum dado encontrado para o projeto {projeto_id} hoje, ou você não tem acesso a este projeto.")
                 
             elif comando == "projeto_periodo" and parametro:
                 partes = parametro.split("|")
@@ -1111,11 +1282,11 @@ def webhook():
                         resumo = formatar_resumo_geral(dados_periodo, numero, f"PROJETO {projeto_id} - PERÍODO {data_inicio_br} a {data_fim_br}", data_inicio, data_fim, projeto_id)
                         detalhado = formatar_resumo_detalhado(dados_periodo, numero, f"PROJETO {projeto_id} - PERÍODO {data_inicio_br} a {data_fim_br}")
                         
-                        enviar_resposta_completa(numero, resumo, detalhado, texto_transcrito)
+                        enviar_resposta_completa(numero, resumo, detalhado, texto_para_frete)
                     else:
-                        enviar_mensagem(numero, f"🎤 Ouvi: \"{texto_transcrito}\"\n\n❌ Nenhum dado encontrado para o projeto {projeto_id} no período {data_inicio_br} a {data_fim_br}, ou você não tem acesso a este projeto.")
+                        enviar_mensagem(numero, f"🎤 Ouvi: \"{texto_para_frete}\"\n\n❌ Nenhum dado encontrado para o projeto {projeto_id} no período {data_inicio_br} a {data_fim_br}, ou você não tem acesso a este projeto.")
                 else:
-                    enviar_mensagem(numero, f"🎤 Ouvi: \"{texto_transcrito}\"\n\n❌ Não consegui entender o período informado. Use o formato DD/MM/YYYY a DD/MM/YYYY.")
+                    enviar_mensagem(numero, f"🎤 Ouvi: \"{texto_para_frete}\"\n\n❌ Não consegui entender o período informado. Use o formato DD/MM/YYYY a DD/MM/YYYY.")
                 
             elif comando == "periodo" and parametro:
                 data_inicio, data_fim = processar_periodo(parametro)
@@ -1126,12 +1297,13 @@ def webhook():
                     resumo = formatar_resumo_geral(dados_periodo, numero, f"PERÍODO {data_inicio_br} a {data_fim_br}", data_inicio, data_fim)
                     detalhado = formatar_resumo_detalhado(dados_periodo, numero, f"PERÍODO {data_inicio_br} a {data_fim_br}")
                     
-                    enviar_resposta_completa(numero, resumo, detalhado, texto_transcrito)
+                    enviar_resposta_completa(numero, resumo, detalhado, texto_para_frete)
                 else:
-                    enviar_mensagem(numero, f"🎤 Ouvi: \"{texto_transcrito}\"\n\n❌ Não consegui entender a data informada.")
+                    enviar_mensagem(numero, f"🎤 Ouvi: \"{texto_para_frete}\"\n\n❌ Não consegui entender a data informada.")
             else:
-                enviar_mensagem(numero, f"🎤 Ouvi: \"{texto_transcrito}\"\n\n❌ Não reconheci o comando. Envie novamente ou digite *menu*.")
-                # PROCESSAMENTO DE TEXTO
+                enviar_mensagem(numero, f"🎤 Ouvi: \"{texto_para_frete}\"\n\n❌ Não reconheci o comando. Envie novamente ou digite *menu*.")
+                
+        # ========== PROCESSAMENTO DE TEXTO ==========
         elif "text" in dados:
             mensagem = dados["text"]["message"].lower().strip()
             
@@ -1236,14 +1408,16 @@ except Exception as e:
     print("🔄 Bot continuará tentando conectar...")
 
 if __name__ == '__main__':
-    print("🤖 Bot Completo - Texto + Áudio iniciando...")
+    print("🤖 Bot Integrado - Produção + Frete (Texto + Áudio) iniciando...")
     print("🎤 Reconhecimento de voz: Google Speech Recognition")
     print("📊 Sistema: Produção com Controle por Usuário")
+    print("🚚 Sistema: Fretes com captura por texto e áudio")
     print("🔐 Usuários carregados dinamicamente da tabela USUARIOS")
     print("🏆 NOVO: Ranking de projetos por faturamento")
     print("🏆 NOVO: Ranking de supervisores por faturamento")
     print("📅 CORRIGIDO: Processamento de períodos por voz")
     print("🎯 NOVO: Filtros por projeto específico")
+    print("🚚 INTEGRADO: Processamento de fretes via texto e áudio")
     print("🚀 RAILWAY: Configurado para deploy em produção")
     print("✅ CORRIGIDO: Sistema anti-duplicação e controle de spam")
     
