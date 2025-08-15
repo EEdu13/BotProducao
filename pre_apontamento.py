@@ -185,14 +185,14 @@ def salvar_raw(telefone, conteudo_bruto, hash_msg):
         print(f"[SQL] Conteúdo (primeiros 100 chars): {conteudo_bruto[:100]}")
         
         query = """
-        INSERT INTO PRE_APONTAMENTO_RAW (PHONE, CONTEUDO_BRUTO, HASH, STATUS, CREATED_AT)
-        VALUES (?, ?, ?, 'PENDENTE', ?)
+        INSERT INTO PRE_APONTAMENTO_RAW (telefone, texto_original, data_hora)
+        VALUES (?, ?, ?)
         """
         
         data_brasilia = obter_data_brasilia()
         print(f"[SQL] 📅 Data/hora Brasília: {data_brasilia}")
         print(f"[SQL] 🚀 Executando INSERT...")
-        cursor.execute(query, (telefone, conteudo_bruto, hash_msg, data_brasilia))
+        cursor.execute(query, (telefone, conteudo_bruto, data_brasilia))
         print(f"[SQL] ✅ INSERT executado com sucesso")
         
         conn.commit()
@@ -405,7 +405,8 @@ INSTRUÇÕES IMPORTANTES:
 5. CÓDIGOS: REGRA IMPORTANTE para colaborador_id vs equipamento:
    - Códigos numéricos (ex: 2508, 2689, 0528) = COLABORADORES → "colaborador_id"
    - Códigos TP (ex: TP001, TP009) = EQUIPAMENTOS → "equipamento"
-   - Para categoria APOIO com TP: colaborador_id=null, equipamento="TP001"
+   - ⚠️ APOIO: SOMENTE se for código TP (ex: "TP001"): equipamento="TP001", colaborador_id=null
+   - ⚠️ APOIO: SOMENTE se for código numérico (ex: "2508"): colaborador_id="2508", equipamento=null
    - Para categoria RATEIO_MANUAL: colaborador_id="2508", equipamento=null
    - Para categoria ESTRUTURA com "TP001 - 2508": equipamento="TP001" E colaborador_id="2508"
    - Para categoria ESTRUTURA: extrair código COMPLETO do colaborador (ex: se aparecer "05" extrair registro completo como "0528")
@@ -423,6 +424,18 @@ INSTRUÇÕES IMPORTANTES:
    2509 - 
    2510 - 
    Deve gerar 3 prêmios com categoria RATEIO_MANUAL e colaborador_id respectivos
+   
+   EXEMPLO APOIO MANUAL (sem equipamento):
+   EQUIPE APOIO ENVOLVIDA
+   2508 -
+   2509 -
+   2510 -
+   Deve gerar: categoria:"APOIO", colaborador_id:"2508", equipamento:null (SEM TP001!)
+   
+   EXEMPLO APOIO COM EQUIPAMENTO:
+   EQUIPE APOIO ENVOLVIDA
+   TP001 -
+   Deve gerar: categoria:"APOIO", equipamento:"TP001", colaborador_id:null
    
    EXEMPLO ESTRUTURA com quebra de linha:
    ESTRUTURA APOIO ENVOLVIDA
@@ -678,12 +691,11 @@ def salvar_boletim_staging(dados_boletim, raw_id):
         
         query = """
         INSERT INTO BOLETIM_STAGING (
-            RAW_ID, DATA_EXECUCAO, PROJETO, EMPRESA, SERVICO, FAZENDA, TALHAO,
-            AREA_TOTAL, AREA_REALIZADA, AREA_RESTANTE, STATUS_CAMPO, VALOR_GANHO,
-            DIARIA_COLABORADOR, LOTE1, INSUMO1, QUANTIDADE1, LOTE2, INSUMO2, 
-            QUANTIDADE2, LOTE3, INSUMO3, QUANTIDADE3, DIVISAO_PREMIO_IGUAL,
-            OBSERVACOES, CREATED_AT
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            raw_id, data_execucao, projeto, empresa, servico, fazenda, talhao,
+            area_total, area_realizada, area_restante, status_campo, valor_ganho,
+            diaria_colaborador, lote1, insumo1, quantidade1, lote2, insumo2, 
+            quantidade2, data_cadastro
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         
         cursor.execute(query, (
@@ -706,11 +718,6 @@ def salvar_boletim_staging(dados_boletim, raw_id):
             dados_boletim.get('lote2'),
             dados_boletim.get('insumo2'),
             dados_boletim.get('quantidade2'),
-            dados_boletim.get('lote3'),
-            dados_boletim.get('insumo3'),
-            dados_boletim.get('quantidade3'),
-            dados_boletim.get('divisao_premio_igual'),
-            dados_boletim.get('observacoes'),
             obter_data_brasilia()  # Data/hora de Brasília
         ))
         
@@ -733,9 +740,9 @@ def salvar_premios_staging(premios_list, raw_id):
         
         query = """
         INSERT INTO PREMIO_STAGING (
-            RAW_ID, CATEGORIA, COLABORADOR_ID, EQUIPAMENTO, PRODUCAO, FUNCAO,
-            RECEBE_PREMIO, VALOR_FIXO, CREATED_AT
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            raw_id, categoria, colaborador_id, equipamento, producao, funcao,
+            recebe_premio, data_cadastro
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """
         
         for premio in premios_list:
@@ -748,7 +755,6 @@ def salvar_premios_staging(premios_list, raw_id):
                 premio.get('producao'),
                 premio.get('funcao'),
                 premio.get('recebe_premio'),
-                premio.get('valor_fixo'),
                 data_brasilia
             ))
         
