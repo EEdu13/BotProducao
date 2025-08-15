@@ -477,6 +477,15 @@ def salvar_boletim_staging(dados_boletim, raw_id):
         conn = conectar_db()
         cursor = conn.cursor()
         
+        # Converter "HOJE" para data atual
+        data_execucao = dados_boletim.get('data_execucao')
+        if data_execucao and data_execucao.upper() == 'HOJE':
+            data_execucao = datetime.now().strftime('%Y-%m-%d')
+            print(f"[SQL] Data convertida: HOJE -> {data_execucao}")
+        
+        print(f"[SQL] 💾 Salvando boletim com RAW_ID: {raw_id}")
+        print(f"[SQL] Data final: {data_execucao}")
+        
         query = """
         INSERT INTO BOLETIM_STAGING (
             RAW_ID, DATA_EXECUCAO, PROJETO, EMPRESA, SERVICO, FAZENDA, TALHAO,
@@ -489,7 +498,7 @@ def salvar_boletim_staging(dados_boletim, raw_id):
         
         cursor.execute(query, (
             raw_id,
-            dados_boletim.get('data_execucao'),
+            data_execucao,  # Usando a data convertida
             dados_boletim.get('projeto'),
             dados_boletim.get('empresa'),
             dados_boletim.get('servico'),
@@ -515,11 +524,14 @@ def salvar_boletim_staging(dados_boletim, raw_id):
         ))
         
         conn.commit()
+        print(f"[SQL] ✅ Boletim salvo na STAGING com sucesso!")
         conn.close()
         return True
         
     except Exception as e:
         print(f"[ERRO] Falha ao salvar boletim: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 def salvar_premios_staging(premios_list, raw_id):
