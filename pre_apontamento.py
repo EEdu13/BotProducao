@@ -212,6 +212,48 @@ def salvar_raw(telefone, conteudo_bruto, hash_msg):
         traceback.print_exc()
         return None
 
+def processar_campos_faltantes(dados):
+    """Pós-processamento para garantir que campos críticos sejam preenchidos"""
+    try:
+        boletim = dados.get('boletim', {})
+        
+        print(f"[POS-PROC] 🔧 Processando campos faltantes...")
+        
+        # 1. ÁREA RESTANTE: Calcular se não foi extraída
+        area_total = boletim.get('area_total')
+        area_realizada = boletim.get('area_realizada')
+        area_restante = boletim.get('area_restante')
+        
+        if area_restante is None and area_total is not None and area_realizada is not None:
+            area_restante = float(area_total) - float(area_realizada)
+            boletim['area_restante'] = area_restante
+            print(f"[POS-PROC] 📏 Área restante calculada: {area_restante}")
+        
+        # 2. STATUS DO CAMPO: Inferir se não foi extraído
+        status_campo = boletim.get('status_campo')
+        if status_campo is None:
+            if area_restante is not None and area_restante > 0:
+                status_campo = "PARCIAL"
+            elif area_restante is not None and area_restante <= 0:
+                status_campo = "CONCLUÍDO"
+            else:
+                status_campo = "INICIADO"
+            
+            boletim['status_campo'] = status_campo
+            print(f"[POS-PROC] 📊 Status campo inferido: {status_campo}")
+        
+        # 3. INSUMOS: Tentar extrair do texto bruto se não foi extraído
+        # (Para implementar depois se necessário)
+        
+        dados['boletim'] = boletim
+        print(f"[POS-PROC] ✅ Pós-processamento concluído")
+        
+        return dados
+        
+    except Exception as e:
+        print(f"[POS-PROC] ❌ ERRO: {e}")
+        return dados
+
 def extrair_dados_com_openai(texto):
     """Usa OpenAI para extrair e estruturar os dados do pré-apontamento"""
     try:
@@ -356,6 +398,17 @@ RESPONDA APENAS COM JSON VÁLIDO no formato:
         print(f"  - insumo2: {boletim.get('insumo2')}")
         print(f"[DEBUG] 📏 Área restante: {boletim.get('area_restante')}")
         print(f"[DEBUG] 📊 Status campo: {boletim.get('status_campo')}")
+        
+        # PÓS-PROCESSAMENTO: Forçar cálculos que o OpenAI não fez
+        dados = processar_campos_faltantes(dados)
+        
+        # DEBUG: Verificar campos APÓS pós-processamento
+        boletim_final = dados.get('boletim', {})
+        print(f"[FINAL] 📦 Insumos finais:")
+        print(f"  - lote1: {boletim_final.get('lote1')}")
+        print(f"  - insumo1: {boletim_final.get('insumo1')}")
+        print(f"[FINAL] 📏 Área restante final: {boletim_final.get('area_restante')}")
+        print(f"[FINAL] 📊 Status campo final: {boletim_final.get('status_campo')}")
         
         return dados
         
