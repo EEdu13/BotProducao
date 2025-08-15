@@ -282,7 +282,13 @@ INSTRUÇÕES IMPORTANTES:
    - Nomes de fazendas devem estar em MAIÚSCULAS
    - Códigos técnicos como "TALHÃO: 001" devem manter formato "CAMPO: VALOR"
 3. DATAS: Se encontrar "HOJE", "DATA: HOJE" ou similar, use "{datetime.now().strftime('%Y-%m-%d')}"
-4. PRÊMIOS/RATEIO: Extrair TODOS os colaboradores das seções:
+4. ⚠️ PADRÕES ESPECÍFICOS - OBRIGATÓRIO EXTRAIR:
+   - "AREA RESTANTE:" ou "ÁREA RESTANTE:" → area_restante
+   - "STATUS:" → status_campo 
+   - "LOTE1:", "LOTE2:", "LOTE3:" → lote1, lote2, lote3
+   - "INSUMO1:", "INSUMO2:", "INSUMO3:" → insumo1, insumo2, insumo3
+   - "QUANTIDADE1:", "QUANTIDADE2:", "QUANTIDADE3:" → quantidade1, quantidade2, quantidade3
+5. PRÊMIOS/RATEIO: Extrair TODOS os colaboradores das seções:
    - "RATEIO PRODUÇÃO MANUAL" → categoria "RATEIO_MANUAL" 
    - "EQUIPE APOIO ENVOLVIDA" → categoria "APOIO" 
    - "ESTRUTURA APOIO ENVOLVIDA" → categoria "ESTRUTURA"
@@ -319,6 +325,14 @@ INSTRUÇÕES IMPORTANTES:
    LOTE: ABC123 INSUMO: HERBICIDA QUANTIDADE: 2.5
    LOTE: DEF456 INSUMO: FERTILIZANTE QUANTIDADE: 10
    Deve gerar: lote1:"ABC123", insumo1:"HERBICIDA", quantidade1:2.5, lote2:"DEF456", insumo2:"FERTILIZANTE", quantidade2:10
+   
+   EXEMPLO FORMATO ESPECÍFICO (seu padrão):
+   LOTE1: 1508AB
+   INSUMO1: MIREX  
+   QUANTIDADE1: 15,59
+   AREA RESTANTE: 40
+   STATUS: ABERTO
+   Deve gerar: lote1:"1508AB", insumo1:"MIREX", quantidade1:15.59, area_restante:40.0, status_campo:"ABERTO"
 8. Para cada colaborador: código, produção (número após hífen), função (texto após PREMIO ou linha seguinte)
 9. RECEBE_PREMIO: 1 se tem "PREMIO", 0 se vazio
 10. CATEGORIA ESTRUTURA: Sempre tem equipamento E colaborador_id quando aparece "TP### - #### - premio"
