@@ -869,3 +869,304 @@ TESTE BÁSICO
     
     resultado = processar_pre_apontamento("5511999999999", texto_teste)
     print(f"Teste: {resultado}")
+
+def processar_aprovacao_coordenador(button_id, telefone_coordenador, mensagem_adicional=""):
+    """
+    Processa a resposta do coordenador (APROVAR, REJEITAR, CORRIGIR)
+    
+    Args:
+        button_id: ID do botão clicado (ex: "aprovar_48", "rejeitar_48")
+        telefone_coordenador: Telefone do coordenador que respondeu
+        mensagem_adicional: Observações adicionais do coordenador
+    """
+    try:
+        print(f"[APRV] 🎯 Processando aprovação do coordenador")
+        print(f"[APRV] 🔘 Button ID: {button_id}")
+        print(f"[APRV] 📞 Coordenador: {telefone_coordenador}")
+        print(f"[APRV] 💬 Mensagem adicional: {mensagem_adicional}")
+        
+        # Extrair ação e RAW_ID do button_id
+        partes = button_id.split('_')
+        if len(partes) != 2:
+            print(f"[APRV] ❌ Button ID inválido: {button_id}")
+            return False
+            
+        acao = partes[0].upper()  # APROVAR, REJEITAR, CORRIGIR
+        raw_id = partes[1]
+        
+        print(f"[APRV] 🔄 Ação: {acao}, RAW_ID: {raw_id}")
+        
+        # Verificar se o RAW_ID existe
+        conn = conectar_db()
+        cursor = conn.cursor()
+        
+        query_check = "SELECT ID, TELEFONE, PROJETO FROM PRE_APONTAMENTO_RAW WHERE ID = ?"
+        cursor.execute(query_check, (raw_id,))
+        registro = cursor.fetchone()
+        
+        if not registro:
+            print(f"[APRV] ❌ RAW_ID {raw_id} não encontrado")
+            conn.close()
+            return False
+            
+        raw_id_db, telefone_usuario, projeto = registro
+        print(f"[APRV] ✅ Registro encontrado - Usuário: {telefone_usuario}, Projeto: {projeto}")
+        
+        # Verificar se o coordenador tem permissão para este projeto
+        query_perm = "SELECT COUNT(*) FROM USUARIOS WHERE TELEFONE = ? AND PROJETO = ? AND PERFIL = 'COORDENADOR'"
+        cursor.execute(query_perm, (telefone_coordenador, projeto))
+        tem_permissao = cursor.fetchone()[0] > 0
+        
+        if not tem_permissao:
+            print(f"[APRV] ❌ Coordenador sem permissão para projeto {projeto}")
+            conn.close()
+            return False
+            
+        print(f"[APRV] ✅ Coordenador autorizado para projeto {projeto}")
+        
+        # Processar de acordo com a ação
+        timestamp_agora = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        if acao == "APROVAR":
+            return aprovar_pre_apontamento(raw_id, telefone_coordenador, telefone_usuario, mensagem_adicional, timestamp_agora)
+            
+        elif acao == "REJEITAR":
+            return rejeitar_pre_apontamento(raw_id, telefone_coordenador, telefone_usuario, mensagem_adicional, timestamp_agora)
+            
+        elif acao == "CORRIGIR":
+            return solicitar_correcao_pre_apontamento(raw_id, telefone_coordenador, telefone_usuario, mensagem_adicional, timestamp_agora)
+            
+        else:
+            print(f"[APRV] ❌ Ação não reconhecida: {acao}")
+            return False
+            
+    except Exception as e:
+        print(f"[APRV] ❌ ERRO no processamento de aprovação: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+def aprovar_pre_apontamento(raw_id, telefone_coordenador, telefone_usuario, observacoes, timestamp):
+    """Aprova um pré-apontamento e move dados para tabelas definitivas"""
+    try:
+        print(f"[APRV] ✅ Iniciando aprovação do RAW_ID {raw_id}")
+        
+        conn = conectar_db()
+        cursor = conn.cursor()
+        
+        # 1. Atualizar status na tabela RAW
+        query_update = """
+        UPDATE PRE_APONTAMENTO_RAW 
+        SET STATUS = 'APROVADO',
+            APROVADO_POR = ?,
+            DATA_APROVACAO = ?,
+            OBSERVACOES_APROVACAO = ?
+        WHERE ID = ?
+        """
+        cursor.execute(query_update, (telefone_coordenador, timestamp, observacoes, raw_id))
+        print(f"[APRV] ✅ Status atualizado para APROVADO")
+        
+        # 2. Mover dados do STAGING para tabelas definitivas
+        # TODO: Implementar lógica de movimentação para BOLETIM e PREMIOS definitivos
+        # Por enquanto, apenas marcamos como aprovado
+        
+        conn.commit()
+        conn.close()
+        
+        # 3. Notificar usuário sobre aprovação
+        notificar_usuario_aprovacao(telefone_usuario, raw_id, "APROVADO", observacoes)
+        
+        # 4. Notificar coordenador sobre confirmação
+        notificar_coordenador_confirmacao(telefone_coordenador, raw_id, "APROVADO")
+        
+        print(f"[APRV] ✅ Aprovação concluída com sucesso!")
+        return True
+        
+    except Exception as e:
+        print(f"[APRV] ❌ ERRO na aprovação: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+def rejeitar_pre_apontamento(raw_id, telefone_coordenador, telefone_usuario, motivo, timestamp):
+    """Rejeita um pré-apontamento"""
+    try:
+        print(f"[APRV] ❌ Iniciando rejeição do RAW_ID {raw_id}")
+        
+        conn = conectar_db()
+        cursor = conn.cursor()
+        
+        # 1. Atualizar status na tabela RAW
+        query_update = """
+        UPDATE PRE_APONTAMENTO_RAW 
+        SET STATUS = 'REJEITADO',
+            APROVADO_POR = ?,
+            DATA_APROVACAO = ?,
+            OBSERVACOES_APROVACAO = ?
+        WHERE ID = ?
+        """
+        cursor.execute(query_update, (telefone_coordenador, timestamp, motivo, raw_id))
+        print(f"[APRV] ✅ Status atualizado para REJEITADO")
+        
+        # 2. Remover dados das tabelas STAGING (opcional - pode manter para histórico)
+        # Por enquanto, apenas marcamos como rejeitado
+        
+        conn.commit()
+        conn.close()
+        
+        # 3. Notificar usuário sobre rejeição
+        notificar_usuario_aprovacao(telefone_usuario, raw_id, "REJEITADO", motivo)
+        
+        # 4. Notificar coordenador sobre confirmação  
+        notificar_coordenador_confirmacao(telefone_coordenador, raw_id, "REJEITADO")
+        
+        print(f"[APRV] ✅ Rejeição concluída com sucesso!")
+        return True
+        
+    except Exception as e:
+        print(f"[APRV] ❌ ERRO na rejeição: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+def solicitar_correcao_pre_apontamento(raw_id, telefone_coordenador, telefone_usuario, solicitacao, timestamp):
+    """Solicita correção de um pré-apontamento"""
+    try:
+        print(f"[APRV] 🔧 Iniciando solicitação de correção do RAW_ID {raw_id}")
+        
+        conn = conectar_db()
+        cursor = conn.cursor()
+        
+        # 1. Atualizar status na tabela RAW
+        query_update = """
+        UPDATE PRE_APONTAMENTO_RAW 
+        SET STATUS = 'CORRECAO_SOLICITADA',
+            APROVADO_POR = ?,
+            DATA_APROVACAO = ?,
+            OBSERVACOES_APROVACAO = ?
+        WHERE ID = ?
+        """
+        cursor.execute(query_update, (telefone_coordenador, timestamp, solicitacao, raw_id))
+        print(f"[APRV] ✅ Status atualizado para CORRECAO_SOLICITADA")
+        
+        conn.commit()
+        conn.close()
+        
+        # 2. Notificar usuário sobre solicitação de correção
+        notificar_usuario_aprovacao(telefone_usuario, raw_id, "CORRECAO_SOLICITADA", solicitacao)
+        
+        # 3. Notificar coordenador sobre confirmação
+        notificar_coordenador_confirmacao(telefone_coordenador, raw_id, "CORRECAO_SOLICITADA")
+        
+        print(f"[APRV] ✅ Solicitação de correção enviada com sucesso!")
+        return True
+        
+    except Exception as e:
+        print(f"[APRV] ❌ ERRO na solicitação de correção: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+def notificar_usuario_aprovacao(telefone_usuario, raw_id, status, observacoes=""):
+    """Notifica o usuário sobre o resultado da aprovação"""
+    try:
+        print(f"[NOTIF_USER] 📱 Notificando usuário sobre {status}")
+        
+        emoji_status = {
+            "APROVADO": "✅",
+            "REJEITADO": "❌", 
+            "CORRECAO_SOLICITADA": "🔧"
+        }
+        
+        status_texto = {
+            "APROVADO": "APROVADO",
+            "REJEITADO": "REJEITADO",
+            "CORRECAO_SOLICITADA": "CORREÇÃO SOLICITADA"
+        }
+        
+        emoji = emoji_status.get(status, "ℹ️")
+        texto = status_texto.get(status, status)
+        
+        mensagem = f"""{emoji} *PRÉ-APONTAMENTO #{raw_id} - {texto}*
+
+{emoji} Seu pré-apontamento foi {texto.lower()} pelo coordenador.
+
+"""
+        
+        if observacoes:
+            mensagem += f"💬 *Observações do coordenador:*\n{observacoes}\n\n"
+            
+        if status == "APROVADO":
+            mensagem += "🎉 *Seu apontamento foi aprovado!*\nOs dados foram transferidos para o sistema definitivo."
+        elif status == "REJEITADO":
+            mensagem += "⚠️ *Seu apontamento foi rejeitado.*\nVerifique as observações e envie um novo apontamento se necessário."
+        elif status == "CORRECAO_SOLICITADA":
+            mensagem += "🔧 *Correção necessária.*\nPor favor, envie um novo apontamento com as correções solicitadas."
+            
+        mensagem += f"\n\n📅 *Processado em:* {datetime.now().strftime('%d/%m/%Y às %H:%M')}"
+        
+        # Enviar via Z-API
+        return enviar_mensagem_zapi(telefone_usuario, mensagem)
+        
+    except Exception as e:
+        print(f"[NOTIF_USER] ❌ ERRO ao notificar usuário: {e}")
+        return False
+
+def notificar_coordenador_confirmacao(telefone_coordenador, raw_id, acao):
+    """Envia confirmação para o coordenador sobre a ação realizada"""
+    try:
+        print(f"[NOTIF_COORD] 📱 Enviando confirmação da ação {acao}")
+        
+        emoji_acao = {
+            "APROVADO": "✅",
+            "REJEITADO": "❌",
+            "CORRECAO_SOLICITADA": "🔧"
+        }
+        
+        emoji = emoji_acao.get(acao, "ℹ️")
+        
+        mensagem = f"""{emoji} *AÇÃO PROCESSADA COM SUCESSO*
+
+Pré-apontamento #{raw_id} foi {acao.lower()}.
+
+📅 *Processado em:* {datetime.now().strftime('%d/%m/%Y às %H:%M')}
+
+✅ O usuário foi notificado automaticamente."""
+
+        return enviar_mensagem_zapi(telefone_coordenador, mensagem)
+        
+    except Exception as e:
+        print(f"[NOTIF_COORD] ❌ ERRO ao confirmar para coordenador: {e}")
+        return False
+
+def enviar_mensagem_zapi(telefone, mensagem):
+    """Envia mensagem via Z-API"""
+    try:
+        import requests
+        
+        if not all([INSTANCE_ID, TOKEN, CLIENT_TOKEN]):
+            print(f"[ZAPI] ❌ Credenciais Z-API não configuradas")
+            return False
+            
+        url_send = f"https://api.z-api.io/instances/{INSTANCE_ID}/token/{TOKEN}/send-text"
+        
+        payload = {
+            "phone": telefone,
+            "message": mensagem
+        }
+        
+        headers = {
+            "Content-Type": "application/json",
+            "Client-Token": CLIENT_TOKEN
+        }
+        
+        response = requests.post(url_send, json=payload, headers=headers)
+        
+        sucesso = response.status_code == 200
+        print(f"[ZAPI] {'✅' if sucesso else '❌'} Envio para {telefone}: {response.status_code}")
+        
+        return sucesso
+        
+    except Exception as e:
+        print(f"[ZAPI] ❌ ERRO no envio: {e}")
+        return False

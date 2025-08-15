@@ -1122,12 +1122,12 @@ def health_check():
 @app.route('/', methods=['GET'])
 def home():
     return {
-        'name': 'Bot WhatsApp Sistema de Produção + Frete',
+        'name': 'Bot WhatsApp Sistema de Produção + Frete + Pré-Apontamento',
         'status': 'running',
-        'version': '2.1 Railway - Integrado',
+        'version': '2.2 Railway - Sistema Completo',
         'timestamp': datetime.now().isoformat(),
-        'endpoints': ['/webhook', '/health'],
-        'features': ['Produção', 'Frete', 'Áudio STT']
+        'endpoints': ['/webhook', '/webhook_pre_apont', '/webhook_aprovacao', '/health'],
+        'features': ['Produção', 'Frete', 'Áudio STT', 'Pré-Apontamento', 'Aprovação Coordenador']
     }, 200
 
 # ================== WEBHOOK PRINCIPAL ==================
@@ -1450,7 +1450,55 @@ def webhook_pre_apontamento_dedicado():
         
         # Verificar se tem mensagem de texto (várias possibilidades)
         mensagem_original = None
+        button_response = None
         
+        # 1. VERIFICAR SE É CLIQUE EM BOTÃO (PRIORIDADE)
+        if tipo_mensagem == "ButtonResponse":
+            button_response = dados.get("buttonResponse", {})
+            print(f"[PRE-BOT] 🔘 ButtonResponse detectado: {button_response}")
+            
+        elif tipo_mensagem == "InteractiveResponse":
+            interactive = dados.get("interactiveResponse", {})
+            button_response = interactive.get("buttonReply", {})
+            print(f"[PRE-BOT] 🔘 InteractiveResponse detectado: {button_response}")
+            
+        elif dados.get("selectedButtonId"):  # Formato alternativo
+            button_response = {
+                "id": dados.get("selectedButtonId"),
+                "title": dados.get("selectedButtonTitle", "")
+            }
+            print(f"[PRE-BOT] 🔘 SelectedButton detectado: {button_response}")
+        
+        # 2. SE FOR BOTÃO DE APROVAÇÃO, PROCESSAR
+        if button_response and button_response.get("id"):
+            button_id = button_response.get("id")
+            button_title = button_response.get("title", "")
+            
+            print(f"[PRE-BOT] 🎯 Botão clicado: {button_id} - {button_title}")
+            
+            # Verificar se é botão de aprovação
+            if any(button_id.startswith(prefix) for prefix in ["aprovar_", "rejeitar_", "corrigir_"]):
+                print(f"[PRE-BOT] ✅ Processando aprovação de coordenador...")
+                
+                from pre_apontamento import processar_aprovacao_coordenador
+                
+                resultado = processar_aprovacao_coordenador(
+                    button_id=button_id,
+                    telefone_coordenador=numero,
+                    mensagem_adicional=""
+                )
+                
+                if resultado:
+                    print(f"[PRE-BOT] ✅ Aprovação processada!")
+                    resposta = "✅ Sua resposta foi processada com sucesso!"
+                else:
+                    print(f"[PRE-BOT] ❌ Erro na aprovação")
+                    resposta = "❌ Erro ao processar sua resposta. Tente novamente."
+                
+                enviar_mensagem(numero, resposta)
+                return '', 200
+        
+        # 3. SE NÃO FOR BOTÃO, PROCESSAR COMO MENSAGEM DE TEXTO
         if tipo_mensagem == "text" and dados.get("text", {}).get("message"):
             mensagem_original = dados["text"]["message"].strip()
         elif tipo_mensagem == "ReceivedCallback" and dados.get("text", {}).get("message"):
@@ -1479,6 +1527,94 @@ def webhook_pre_apontamento_dedicado():
         
     except Exception as e:
         print(f"[PRE-BOT] ❌ ERRO: {e}")
+        import traceback
+        traceback.print_exc()
+        return '', 500
+
+@app.route('/webhook_aprovacao', methods=['POST'])
+def webhook_aprovacao_coordenador():
+    """Webhook para processar aprovações de coordenadores (botões)"""
+    try:
+        dados = request.json
+        print(f"[APRV-BOT] ========== WEBHOOK APROVAÇÃO ==========")
+        print(f"[APRV-BOT] 📦 Dados recebidos: {dados}")
+        
+        # 🚨 VERIFICAÇÃO: Ignorar mensagens do próprio bot
+        if dados.get('fromMe', False):
+            print(f"[APRV-BOT] ⏭️ Ignorando mensagem do próprio bot")
+            return "OK"
+        
+        numero = dados.get("phone")
+        tipo_mensagem = dados.get("type")
+        
+        print(f"[APRV-BOT] 📞 Número: {numero}")
+        print(f"[APRV-BOT] 🔄 Tipo: {tipo_mensagem}")
+        
+        # Verificar se é um clique em botão
+        button_response = None
+        mensagem_adicional = ""
+        
+        # Diferentes formatos de resposta de botão no Z-API
+        if tipo_mensagem == "ButtonResponse":
+            button_response = dados.get("buttonResponse", {})
+            print(f"[APRV-BOT] 🔘 ButtonResponse detectado: {button_response}")
+            
+        elif tipo_mensagem == "InteractiveResponse":
+            interactive = dados.get("interactiveResponse", {})
+            button_response = interactive.get("buttonReply", {})
+            print(f"[APRV-BOT] 🔘 InteractiveResponse detectado: {button_response}")
+            
+        elif dados.get("selectedButtonId"):  # Formato alternativo
+            button_response = {
+                "id": dados.get("selectedButtonId"),
+                "title": dados.get("selectedButtonTitle", "")
+            }
+            print(f"[APRV-BOT] 🔘 SelectedButton detectado: {button_response}")
+        
+        if button_response and button_response.get("id"):
+            button_id = button_response.get("id")
+            button_title = button_response.get("title", "")
+            
+            print(f"[APRV-BOT] 🎯 Processando botão: {button_id} - {button_title}")
+            
+            # Verificar se é um botão de aprovação (prefixos: aprovar_, rejeitar_, corrigir_)
+            if any(button_id.startswith(prefix) for prefix in ["aprovar_", "rejeitar_", "corrigir_"]):
+                print(f"[APRV-BOT] ✅ Botão de aprovação identificado!")
+                
+                # Verificar se há mensagem adicional do coordenador
+                if tipo_mensagem == "text" and dados.get("text", {}).get("message"):
+                    mensagem_adicional = dados["text"]["message"].strip()
+                elif dados.get("message"):
+                    mensagem_adicional = str(dados.get("message", "")).strip()
+                
+                # Processar aprovação
+                from pre_apontamento import processar_aprovacao_coordenador
+                
+                resultado = processar_aprovacao_coordenador(
+                    button_id=button_id,
+                    telefone_coordenador=numero,
+                    mensagem_adicional=mensagem_adicional
+                )
+                
+                if resultado:
+                    print(f"[APRV-BOT] ✅ Aprovação processada com sucesso!")
+                    resposta = "✅ Sua resposta foi processada com sucesso!"
+                else:
+                    print(f"[APRV-BOT] ❌ Erro ao processar aprovação")
+                    resposta = "❌ Erro ao processar sua resposta. Tente novamente."
+                
+                # Enviar confirmação
+                enviar_mensagem(numero, resposta)
+                
+            else:
+                print(f"[APRV-BOT] ⚠️ Botão não relacionado a aprovação: {button_id}")
+        else:
+            print(f"[APRV-BOT] ⚠️ Não é um clique em botão válido")
+        
+        return '', 200
+        
+    except Exception as e:
+        print(f"[APRV-BOT] ❌ ERRO: {e}")
         import traceback
         traceback.print_exc()
         return '', 500
