@@ -71,6 +71,9 @@ def detectar_pre_apontamento(texto):
     """Detecta se a mensagem é um pré-apontamento baseado em palavras-chave"""
     texto_lower = texto.lower()
     
+    print(f"[DETECT] 🔍 Analisando texto: {len(texto)} chars")
+    print(f"[DETECT] Primeiros 200 chars: {texto[:200]}")
+    
     # Indicadores principais
     indicadores_principais = ['data:', 'projeto:', 'empresa:', 'serviço:', 'fazenda:', 'talhão:']
     
@@ -78,11 +81,24 @@ def detectar_pre_apontamento(texto):
     separadores = ['-------------', '---', '========']
     
     # Contar indicadores encontrados
-    indicadores_encontrados = sum(1 for ind in indicadores_principais if ind in texto_lower)
-    separadores_encontrados = sum(1 for sep in separadores if sep in texto)
+    indicadores_encontrados = []
+    for ind in indicadores_principais:
+        if ind in texto_lower:
+            indicadores_encontrados.append(ind)
+    
+    separadores_encontrados = []
+    for sep in separadores:
+        if sep in texto:
+            separadores_encontrados.append(sep)
+    
+    print(f"[DETECT] Indicadores encontrados ({len(indicadores_encontrados)}): {indicadores_encontrados}")
+    print(f"[DETECT] Separadores encontrados ({len(separadores_encontrados)}): {separadores_encontrados}")
     
     # Regra: pelo menos 3 indicadores principais OU pelo menos 2 separadores
-    return indicadores_encontrados >= 3 or separadores_encontrados >= 2
+    resultado = len(indicadores_encontrados) >= 3 or len(separadores_encontrados) >= 2
+    print(f"[DETECT] ✅ É pré-apontamento: {resultado}")
+    
+    return resultado
 
 def gerar_hash_mensagem(texto, telefone):
     """Gera hash único para evitar duplicação"""
