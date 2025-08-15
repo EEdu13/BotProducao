@@ -272,6 +272,11 @@ INSTRUÇÕES IMPORTANTES:
    TP001 - 2508 - premio
    MOTORISTA
    Deve gerar: categoria:"ESTRUTURA", equipamento:"TP001", colaborador_id:"2508", funcao:"MOTORISTA", recebe_premio:1
+   
+   EXEMPLO INSUMOS:
+   LOTE: ABC123 INSUMO: HERBICIDA QUANTIDADE: 2.5
+   LOTE: DEF456 INSUMO: FERTILIZANTE QUANTIDADE: 10
+   Deve gerar: lote1:"ABC123", insumo1:"HERBICIDA", quantidade1:2.5, lote2:"DEF456", insumo2:"FERTILIZANTE", quantidade2:10
 8. Para cada colaborador: código, produção (número após hífen), função (texto após PREMIO ou linha seguinte)
 9. RECEBE_PREMIO: 1 se tem "PREMIO", 0 se vazio
 10. CATEGORIA ESTRUTURA: Sempre tem equipamento E colaborador_id quando aparece "TP### - #### - premio"
@@ -355,12 +360,17 @@ Você é um especialista em extrair dados de pré-apontamentos de campo. Analise
 REGRAS IMPORTANTES:
 1. DATA: Se "HOJE", use a data atual no formato YYYY-MM-DD
 2. VALORES: Remover "R$", pontos de milhares, vírgula decimal vira ponto (ex: "R$ 18.004,43" = 18004.43)
-3. LOTES/INSUMOS: Apenas os que têm dados preenchidos
-4. RATEIO: Extrair colaborador_id e equipamento_id dos códigos
-5. RECEBE_PREMIO: 1 se tem "PREMIO", 0 se vazio
-6. AREAS: Converter vírgula para ponto decimal
-7. RATEIO AUTOMÁTICO: Se produção estiver em branco ou zero, dividir área realizada igualmente
-8. VALIDAÇÃO: Verificar se todos os colaboradores têm produção preenchida
+3. LOTES/INSUMOS: Extrair TODOS os insumos encontrados (lote1+insumo1+quantidade1, lote2+insumo2+quantidade2, etc)
+   - Buscar padrões: "LOTE:", "INSUMO:", "QUANTIDADE:", "PRODUTO:", "DEFENSIVO:"
+   - Exemplos: "LOTE ABC123", "INSUMO HERBICIDA", "QUANTIDADE 2,5L"
+4. ÁREA RESTANTE: Calcular AREA_TOTAL - AREA_REALIZADA, ou extrair se informado explicitamente
+5. STATUS CAMPO: Extrair informações sobre condições/status do campo 
+   - Buscar: "STATUS:", "SITUAÇÃO:", "CONDIÇÃO:", palavras como "CONCLUÍDO", "PARCIAL", "INICIADO", "PENDENTE"
+6. RATEIO: Extrair colaborador_id e equipamento_id dos códigos
+7. RECEBE_PREMIO: 1 se tem "PREMIO", 0 se vazio
+8. AREAS: Converter vírgula para ponto decimal
+9. RATEIO AUTOMÁTICO: Se produção estiver em branco ou zero, dividir área realizada igualmente
+10. VALIDAÇÃO: Verificar se todos os colaboradores têm produção preenchida
 
 CORREÇÕES AUTOMÁTICAS OBRIGATÓRIAS:
 - "larzil" ou "larsil" → "LARSIL"
