@@ -584,10 +584,6 @@ def processar_pre_apontamento(numero, texto):
             }
         
         print(f"[PRE-APONT] Dados extraídos com sucesso")
-                'resposta': '⚠️ Pré-apontamento recebido, mas houve dificuldade na extração automática. Será analisado manualmente.'
-            }
-        
-        print(f"[PRE-APONT] Dados extraídos com OpenAI")
         
         # 4.1. Verificar rateio e aplicar lógicas automáticas
         dados_corrigidos, alertas_rateio = verificar_rateio_e_aplicar_logica(texto, dados_extraidos)
