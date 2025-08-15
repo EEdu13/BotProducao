@@ -354,6 +354,24 @@ def processar_campos_faltantes(dados):
         # (Manter lógica existente para cálculo de área restante e status se ainda None)
         # ... resto da lógica existente ...
         
+        # 🚨 VALIDAÇÃO CRÍTICA: Corrigir equipamento incorreto em categoria APOIO
+        premios = dados.get('premios', [])
+        for i, premio in enumerate(premios):
+            if premio.get('categoria') == 'APOIO':
+                colaborador_id = premio.get('colaborador_id')
+                equipamento = premio.get('equipamento')
+                
+                # Se tem colaborador_id (número) mas também tem equipamento, remover equipamento
+                if colaborador_id and equipamento:
+                    print(f"[POS-PROC] 🔧 CORRIGINDO: APOIO {colaborador_id} tinha equipamento {equipamento} → removendo equipamento")
+                    premios[i]['equipamento'] = None
+                    
+                # Se colaborador_id é numérico mas equipamento é TP, corrigir
+                if colaborador_id and str(colaborador_id).isdigit() and equipamento and 'TP' in str(equipamento):
+                    print(f"[POS-PROC] 🔧 CORRIGINDO: APOIO numérico {colaborador_id} com TP {equipamento} → removendo TP")
+                    premios[i]['equipamento'] = None
+        
+        dados['premios'] = premios
         dados['boletim'] = boletim
         print(f"[POS-PROC] ✅ Pós-processamento concluído")
         
@@ -405,8 +423,12 @@ INSTRUÇÕES IMPORTANTES:
 5. CÓDIGOS: REGRA IMPORTANTE para colaborador_id vs equipamento:
    - Códigos numéricos (ex: 2508, 2689, 0528) = COLABORADORES → "colaborador_id"
    - Códigos TP (ex: TP001, TP009) = EQUIPAMENTOS → "equipamento"
-   - ⚠️ APOIO: SOMENTE se for código TP (ex: "TP001"): equipamento="TP001", colaborador_id=null
-   - ⚠️ APOIO: SOMENTE se for código numérico (ex: "2508"): colaborador_id="2508", equipamento=null
+   
+   🚨 REGRA CRÍTICA - EQUIPE APOIO ENVOLVIDA:
+   - Se o código for NÚMERO (2689, 2608, 2609): colaborador_id="2689", equipamento=null
+   - Se o código for TP### (TP001): colaborador_id=null, equipamento="TP001"
+   - NUNCA copie equipamento TP001 para colaboradores numéricos!
+   
    - Para categoria RATEIO_MANUAL: colaborador_id="2508", equipamento=null
    - Para categoria ESTRUTURA com "TP001 - 2508": equipamento="TP001" E colaborador_id="2508"
    - Para categoria ESTRUTURA: extrair código COMPLETO do colaborador (ex: se aparecer "05" extrair registro completo como "0528")
@@ -427,10 +449,13 @@ INSTRUÇÕES IMPORTANTES:
    
    EXEMPLO APOIO MANUAL (sem equipamento):
    EQUIPE APOIO ENVOLVIDA
-   2508 -
-   2509 -
-   2510 -
-   Deve gerar: categoria:"APOIO", colaborador_id:"2508", equipamento:null (SEM TP001!)
+   2689 - PREMIO - VIVEIRO
+   2608 -
+   2609 -
+   Deve gerar: 
+   - categoria:"APOIO", colaborador_id:"2689", equipamento:null, funcao:"VIVEIRO"
+   - categoria:"APOIO", colaborador_id:"2608", equipamento:null
+   - categoria:"APOIO", colaborador_id:"2609", equipamento:null
    
    EXEMPLO APOIO COM EQUIPAMENTO:
    EQUIPE APOIO ENVOLVIDA
