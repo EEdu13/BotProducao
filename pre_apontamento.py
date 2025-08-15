@@ -15,8 +15,20 @@ DB_PASSWORD = os.environ.get('DB_PASSWORD')
 # Configuração OpenAI
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
 client = None
+
+print(f"[INIT] Inicializando cliente OpenAI...")
+print(f"[INIT] API Key presente: {'Sim' if OPENAI_API_KEY else 'Não'}")
+
 if OPENAI_API_KEY:
-    client = OpenAI(api_key=OPENAI_API_KEY)
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=OPENAI_API_KEY)
+        print(f"[INIT] ✅ Cliente OpenAI configurado com sucesso")
+    except Exception as e:
+        print(f"[INIT] ❌ Erro ao configurar OpenAI: {e}")
+        client = None
+else:
+    print(f"[INIT] ❌ OPENAI_API_KEY não encontrada")
 
 # Configurações Z-API para notificações
 INSTANCE_ID = os.environ.get('INSTANCE_ID')
@@ -105,8 +117,90 @@ def salvar_raw(telefone, conteudo_bruto, hash_msg):
 def extrair_dados_com_openai(texto):
     """Usa OpenAI para extrair e estruturar os dados do pré-apontamento"""
     try:
+        print(f"[OPENAI] Iniciando extração de dados...")
+        
         if not client:
-            raise Exception("OpenAI client não configurado")
+            print(f"[OPENAI] ❌ Cliente OpenAI não configurado")
+            return None
+            
+        if not OPENAI_API_KEY:
+            print(f"[OPENAI] ❌ API Key não disponível")
+            return None
+            
+        print(f"[OPENAI] ✅ Cliente disponível, preparando prompt...")
+        
+        prompt = f"""
+Você é um especialista em extração de dados de pré-apontamentos agrícolas.
+
+INSTRUÇÕES IMPORTANTES:
+1. Extraia TODOS os dados encontrados no texto
+2. Aplique correções automáticas de ortografia e formatação:
+   - "larzil" → "LARSIL" 
+   - "furmiga" → "FORMIGA"
+   - "talão" → "TALHÃO"
+   - Nomes de fazendas devem estar em MAIÚSCULAS
+   - Códigos técnicos como "TALHÃO: 001" devem manter formato "CAMPO: VALOR"
+3. Se algum campo estiver em branco, deixe como string vazia ""
+4. Para prêmios, se não houver dados específicos, retorne lista vazia []
+5. Mantenha sempre o formato JSON válido
+
+TEXTO PARA PROCESSAR:
+{texto}
+
+RESPONDA APENAS COM JSON VÁLIDO no formato:
+{{
+  "boletim": {{
+    "data_execucao": "YYYY-MM-DD",
+    "projeto": "",
+    "empresa": "",
+    "servico": "",
+    "fazenda": "",
+    "talhao": "",
+    "area_realizada": 0,
+    "area_total": 0,
+    "valor_ganho": 0,
+    "diaria_colaborador": 0,
+    "observacoes": ""
+  }},
+  "premios": []
+}}"""
+
+        print(f"[OPENAI] Enviando requisição para GPT-3.5-turbo...")
+        
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "Você é um assistente especializado em extração de dados agrícolas. Responda APENAS com JSON válido."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=1000,
+            temperature=0.1
+        )
+        
+        print(f"[OPENAI] ✅ Resposta recebida com sucesso")
+        
+        conteudo = response.choices[0].message.content.strip()
+        print(f"[OPENAI] Processando resposta: {len(conteudo)} caracteres")
+        
+        # Limpar possíveis marcadores de código
+        if conteudo.startswith('```json'):
+            conteudo = conteudo[7:]
+        if conteudo.startswith('```'):
+            conteudo = conteudo[3:]
+        if conteudo.endswith('```'):
+            conteudo = conteudo[:-3]
+        
+        print(f"[OPENAI] Fazendo parse do JSON...")
+        dados = json.loads(conteudo.strip())
+        print(f"[OPENAI] ✅ JSON parseado com sucesso!")
+        
+        return dados
+        
+    except Exception as e:
+        print(f"[OPENAI] ❌ ERRO: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return None
         
         prompt = f"""
 Você é um especialista em extrair dados de pré-apontamentos de campo. Analise o texto abaixo e extraia as informações seguindo EXATAMENTE a estrutura JSON solicitada.
