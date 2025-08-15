@@ -978,36 +978,52 @@ def detectar_resposta_coordenador(texto, telefone_coordenador):
     Formatos aceitos: SIM 48, NAO 48, CORRIGIR 48
     """
     try:
-        print(f"[COORD-RESP] 🔍 Analisando resposta: '{texto}'")
+        print(f"[COORD-RESP] ========== DETECTANDO RESPOSTA ==========")
+        print(f"[COORD-RESP] 📝 Texto original: '{texto}'")
+        print(f"[COORD-RESP] 📞 Telefone coordenador: {telefone_coordenador}")
         
         # Normalizar texto
         texto_limpo = texto.upper().strip()
         palavras = texto_limpo.split()
         
-        print(f"[COORD-RESP] 📝 Palavras: {palavras}")
+        print(f"[COORD-RESP] 🔄 Texto normalizado: '{texto_limpo}'")
+        print(f"[COORD-RESP] � Palavras detectadas: {palavras}")
+        print(f"[COORD-RESP] 🔢 Número de palavras: {len(palavras)}")
         
         # Verificar padrões: ACAO + NUMERO
         if len(palavras) >= 2:
             acao = palavras[0]
+            print(f"[COORD-RESP] 🎯 Ação detectada: '{acao}'")
             
             # Tentar extrair número (pode ser qualquer palavra que contenha dígitos)
             raw_id = None
-            for palavra in palavras[1:]:
+            for i, palavra in enumerate(palavras[1:], 1):
+                print(f"[COORD-RESP] 🔍 Analisando palavra {i}: '{palavra}'")
                 if palavra.isdigit():
                     raw_id = palavra
+                    print(f"[COORD-RESP] ✅ RAW_ID encontrado (isdigit): {raw_id}")
                     break
                 # Também aceitar números dentro de texto (ex: "SIM48", "NAO48")
                 import re
                 numeros = re.findall(r'\d+', palavra)
                 if numeros:
                     raw_id = numeros[0]
+                    print(f"[COORD-RESP] ✅ RAW_ID encontrado (regex): {raw_id}")
                     break
             
+            print(f"[COORD-RESP] 📊 Ação final: '{acao}', RAW_ID final: '{raw_id}'")
+            print(f"[COORD-RESP] 🔍 Ação válida? {acao in ['SIM', 'NAO', 'CORRIGIR']}")
+            print(f"[COORD-RESP] 🔍 RAW_ID válido? {raw_id is not None}")
+            
             if raw_id and acao in ['SIM', 'NAO', 'CORRIGIR']:
-                print(f"[COORD-RESP] ✅ Resposta detectada: {acao} para RAW_ID {raw_id}")
+                print(f"[COORD-RESP] ✅ RESPOSTA VÁLIDA DETECTADA: {acao} para RAW_ID {raw_id}")
                 
                 # Verificar se o coordenador tem permissão para este RAW_ID
-                if verificar_permissao_coordenador(telefone_coordenador, raw_id):
+                print(f"[COORD-RESP] 🔒 Verificando permissão do coordenador...")
+                tem_permissao = verificar_permissao_coordenador(telefone_coordenador, raw_id)
+                print(f"[COORD-RESP] 🔒 Permissão resultado: {tem_permissao}")
+                
+                if tem_permissao:
                     
                     # Converter para formato de button_id para compatibilidade
                     button_id_map = {
@@ -1017,14 +1033,16 @@ def detectar_resposta_coordenador(texto, telefone_coordenador):
                     }
                     
                     button_id = button_id_map[acao]
-                    print(f"[COORD-RESP] 🎯 Processando como: {button_id}")
+                    print(f"[COORD-RESP] 🎯 Button ID gerado: {button_id}")
                     
-                    return {
+                    resultado = {
                         'is_resposta_coord': True,
                         'button_id': button_id,
                         'acao': acao,
                         'raw_id': raw_id
                     }
+                    print(f"[COORD-RESP] ✅ RESULTADO FINAL: {resultado}")
+                    return resultado
                 else:
                     print(f"[COORD-RESP] ❌ Coordenador sem permissão para RAW_ID {raw_id}")
                     return {
@@ -1032,53 +1050,79 @@ def detectar_resposta_coordenador(texto, telefone_coordenador):
                         'erro': 'Sem permissão para este apontamento'
                     }
             else:
-                print(f"[COORD-RESP] ⚠️ Formato inválido - Ação: {acao}, RAW_ID: {raw_id}")
+                print(f"[COORD-RESP] ❌ FORMATO INVÁLIDO")
+                print(f"[COORD-RESP] - Ação '{acao}' válida: {acao in ['SIM', 'NAO', 'CORRIGIR']}")
+                print(f"[COORD-RESP] - RAW_ID '{raw_id}' válido: {raw_id is not None}")
+        else:
+            print(f"[COORD-RESP] ❌ POUCAS PALAVRAS: {len(palavras)} (mínimo 2)")
         
-        print(f"[COORD-RESP] ➡️ Não é resposta de coordenador")
+        print(f"[COORD-RESP] ➡️ NÃO É RESPOSTA DE COORDENADOR")
         return {'is_resposta_coord': False}
         
     except Exception as e:
-        print(f"[COORD-RESP] ❌ ERRO: {e}")
+        print(f"[COORD-RESP] ❌ ERRO CRÍTICO: {e}")
+        import traceback
+        traceback.print_exc()
         return {'is_resposta_coord': False, 'erro': str(e)}
 
 def verificar_permissao_coordenador(telefone_coordenador, raw_id):
     """Verifica se o coordenador tem permissão para aprovar este RAW_ID"""
     try:
+        print(f"[PERM] ========== VERIFICANDO PERMISSÃO ==========")
+        print(f"[PERM] 📞 Telefone coordenador: {telefone_coordenador}")
+        print(f"[PERM] 🔢 RAW_ID: {raw_id}")
+        
         conn = conectar_db()
         cursor = conn.cursor()
         
         # Buscar projeto do RAW_ID
         query_projeto = "SELECT PROJETO FROM PRE_APONTAMENTO_RAW WHERE ID = ?"
+        print(f"[PERM] 📝 Query projeto: {query_projeto}")
+        print(f"[PERM] 📝 Parâmetro: {raw_id}")
+        
         cursor.execute(query_projeto, (raw_id,))
         resultado = cursor.fetchone()
         
+        print(f"[PERM] 📊 Resultado query projeto: {resultado}")
+        
         if not resultado:
-            print(f"[PERM] ❌ RAW_ID {raw_id} não encontrado")
+            print(f"[PERM] ❌ RAW_ID {raw_id} não encontrado na tabela PRE_APONTAMENTO_RAW")
             conn.close()
             return False
             
         projeto = resultado[0]
-        print(f"[PERM] 📊 RAW_ID {raw_id} é do projeto {projeto}")
+        print(f"[PERM] ✅ RAW_ID {raw_id} é do projeto: {projeto}")
         
         # Verificar se coordenador tem permissão para este projeto
         query_coord = """
         SELECT COUNT(*) FROM USUARIOS 
         WHERE TELEFONE = ? AND PROJETO = ? AND PERFIL = 'COORDENADOR'
         """
+        print(f"[PERM] 📝 Query coordenador: {query_coord}")
+        print(f"[PERM] 📝 Parâmetros: telefone={telefone_coordenador}, projeto={projeto}")
+        
         cursor.execute(query_coord, (telefone_coordenador, projeto))
-        tem_permissao = cursor.fetchone()[0] > 0
+        count_resultado = cursor.fetchone()
+        tem_permissao = count_resultado[0] > 0
+        
+        print(f"[PERM] 📊 Resultado query coordenador: {count_resultado}")
+        print(f"[PERM] 📊 Count: {count_resultado[0]}")
+        print(f"[PERM] 📊 Tem permissão: {tem_permissao}")
         
         conn.close()
         
         if tem_permissao:
-            print(f"[PERM] ✅ Coordenador autorizado para projeto {projeto}")
+            print(f"[PERM] ✅ Coordenador {telefone_coordenador} AUTORIZADO para projeto {projeto}")
         else:
-            print(f"[PERM] ❌ Coordenador SEM permissão para projeto {projeto}")
+            print(f"[PERM] ❌ Coordenador {telefone_coordenador} SEM PERMISSÃO para projeto {projeto}")
+            print(f"[PERM] 🔍 Verificar se telefone e projeto estão corretos na tabela USUARIOS")
             
         return tem_permissao
         
     except Exception as e:
-        print(f"[PERM] ❌ ERRO na verificação: {e}")
+        print(f"[PERM] ❌ ERRO CRÍTICO na verificação: {e}")
+        import traceback
+        traceback.print_exc()
         return False
     """
     Processa a resposta do coordenador (APROVAR, REJEITAR, CORRIGIR)
@@ -1158,10 +1202,17 @@ def verificar_permissao_coordenador(telefone_coordenador, raw_id):
 def aprovar_pre_apontamento(raw_id, telefone_coordenador, telefone_usuario, observacoes, timestamp):
     """Aprova um pré-apontamento e move dados para tabelas definitivas"""
     try:
-        print(f"[APRV] ✅ Iniciando aprovação do RAW_ID {raw_id}")
+        print(f"[APRV] ========== INICIANDO APROVAÇÃO ==========")
+        print(f"[APRV] 🔢 RAW_ID: {raw_id}")
+        print(f"[APRV] 📞 Telefone coordenador: {telefone_coordenador}")
+        print(f"[APRV] 📱 Telefone usuário: {telefone_usuario}")
+        print(f"[APRV] 📝 Observações: {observacoes}")
+        print(f"[APRV] ⏰ Timestamp: {timestamp}")
         
+        print(f"[APRV] 🔗 Conectando ao banco de dados...")
         conn = conectar_db()
         cursor = conn.cursor()
+        print(f"[APRV] ✅ Conexão estabelecida")
         
         # 1. Atualizar status na tabela RAW
         query_update = """
@@ -1172,8 +1223,46 @@ def aprovar_pre_apontamento(raw_id, telefone_coordenador, telefone_usuario, obse
             OBSERVACOES_APROVACAO = ?
         WHERE ID = ?
         """
+        print(f"[APRV] 📝 Query UPDATE: {query_update}")
+        print(f"[APRV] 📝 Parâmetros: coordenador={telefone_coordenador}, timestamp={timestamp}, obs={observacoes}, id={raw_id}")
+        
         cursor.execute(query_update, (telefone_coordenador, timestamp, observacoes, raw_id))
-        print(f"[APRV] ✅ Status atualizado para APROVADO")
+        rows_affected = cursor.rowcount
+        print(f"[APRV] 📊 Linhas afetadas pelo UPDATE: {rows_affected}")
+        
+        if rows_affected > 0:
+            print(f"[APRV] ✅ Status atualizado para APROVADO com sucesso!")
+        else:
+            print(f"[APRV] ⚠️ NENHUMA linha foi atualizada - RAW_ID {raw_id} pode não existir!")
+        
+        # 2. Commit das mudanças
+        print(f"[APRV] 💾 Fazendo commit das mudanças...")
+        conn.commit()
+        print(f"[APRV] ✅ Commit realizado")
+        
+        conn.close()
+        print(f"[APRV] 🔗 Conexão fechada")
+        
+        # 3. Notificar usuário sobre aprovação
+        print(f"[APRV] 📤 Enviando notificação para usuário...")
+        resultado_notif_user = notificar_usuario_aprovacao(telefone_usuario, raw_id, "APROVADO", observacoes)
+        print(f"[APRV] 📤 Notificação usuário: {'✅ Sucesso' if resultado_notif_user else '❌ Falha'}")
+        
+        # 4. Notificar coordenador sobre confirmação
+        print(f"[APRV] 📤 Enviando confirmação para coordenador...")
+        resultado_notif_coord = notificar_coordenador_confirmacao(telefone_coordenador, raw_id, "APROVADO")
+        print(f"[APRV] 📤 Confirmação coordenador: {'✅ Sucesso' if resultado_notif_coord else '❌ Falha'}")
+        
+        print(f"[APRV] ✅ APROVAÇÃO CONCLUÍDA COM SUCESSO!")
+        return True
+        
+    except Exception as e:
+        print(f"[APRV] ❌ ERRO CRÍTICO na aprovação: {e}")
+        print(f"[APRV] 📍 Tipo do erro: {type(e).__name__}")
+        import traceback
+        print(f"[APRV] 🔍 Stack trace completo:")
+        traceback.print_exc()
+        return False
         
         # 2. Mover dados do STAGING para tabelas definitivas
         # TODO: Implementar lógica de movimentação para BOLETIM e PREMIOS definitivos
