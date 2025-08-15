@@ -250,20 +250,32 @@ INSTRUÇÕES IMPORTANTES:
    - Códigos TP (ex: TP001, TP009) = EQUIPAMENTOS → "equipamento"
    - Para categoria APOIO com TP: colaborador_id=null, equipamento="TP001"
    - Para categoria RATEIO_MANUAL: colaborador_id="2508", equipamento=null
+   - Para categoria ESTRUTURA com "TP001 - 2508": equipamento="TP001" E colaborador_id="2508"
    - Para categoria ESTRUTURA: extrair código COMPLETO do colaborador (ex: se aparecer "05" extrair registro completo como "0528")
 6. EXTRAÇÃO DE COLABORADORES:
    - Sempre extrair o código COMPLETO do colaborador, não apenas prefixos
    - Se encontrar código parcial (ex: "05"), buscar no contexto o código completo
    - Para ESTRUTURA, verificar se há padrão de códigos similares para completar
+   - QUEBRAS DE LINHA: WhatsApp mobile pode quebrar linhas, então:
+     * "TP001 - 2508 - premio\nMOTORISTA" = equipamento:"TP001", colaborador_id:"2508", funcao:"MOTORISTA"
+     * Sempre procurar a linha seguinte para função se não estiver na mesma linha
+     * Se código TP estiver junto com número (ex: TP001 - 2508), ambos são válidos
 7. EXEMPLO de extração correta:
    RATEIO PRODUÇÃO MANUAL
    2508 - 
    2509 - 
    2510 - 
    Deve gerar 3 prêmios com categoria RATEIO_MANUAL e colaborador_id respectivos
-8. Para cada colaborador: código, produção (número após hífen), função (texto após PREMIO)
+   
+   EXEMPLO ESTRUTURA com quebra de linha:
+   ESTRUTURA APOIO ENVOLVIDA
+   TP001 - 2508 - premio
+   MOTORISTA
+   Deve gerar: categoria:"ESTRUTURA", equipamento:"TP001", colaborador_id:"2508", funcao:"MOTORISTA", recebe_premio:1
+8. Para cada colaborador: código, produção (número após hífen), função (texto após PREMIO ou linha seguinte)
 9. RECEBE_PREMIO: 1 se tem "PREMIO", 0 se vazio
-9. Se algum campo estiver em branco, deixe como string vazia ""
+10. CATEGORIA ESTRUTURA: Sempre tem equipamento E colaborador_id quando aparece "TP### - #### - premio"
+11. Se algum campo estiver em branco, deixe como string vazia ""
 
 TEXTO PARA PROCESSAR:
 {texto}
