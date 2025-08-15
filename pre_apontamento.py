@@ -255,7 +255,7 @@ INSTRUÇÕES IMPORTANTES:
    2508 - 
    2509 - 
    2510 - 
-   Deve gerar 3 prêmios: [{categoria:"RATEIO_MANUAL",colaborador_id:"2508"},{categoria:"RATEIO_MANUAL",colaborador_id:"2509"},{categoria:"RATEIO_MANUAL",colaborador_id:"2510"}]
+   Deve gerar 3 prêmios com categoria RATEIO_MANUAL e colaborador_id respectivos
 7. Para cada colaborador: código, produção (número após hífen), função (texto após PREMIO)
 8. RECEBE_PREMIO: 1 se tem "PREMIO", 0 se vazio
 9. Se algum campo estiver em branco, deixe como string vazia ""
