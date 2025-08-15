@@ -7,6 +7,16 @@ from datetime import datetime
 import json
 import pytz  # Para timezone de Brasília
 
+# Carregar variáveis de ambiente do arquivo .env
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+    print(f"[INIT] 📁 Arquivo .env carregado com sucesso")
+except ImportError:
+    print(f"[INIT] ⚠️ python-dotenv não instalado, usando variáveis de sistema")
+except Exception as e:
+    print(f"[INIT] ⚠️ Erro ao carregar .env: {e}")
+
 # Configuração de timezone
 TIMEZONE_BRASILIA = pytz.timezone('America/Sao_Paulo')
 
@@ -242,8 +252,75 @@ def processar_campos_faltantes(dados):
             boletim['status_campo'] = status_campo
             print(f"[POS-PROC] 📊 Status campo inferido: {status_campo}")
         
-        # 3. INSUMOS: Tentar extrair do texto bruto se não foi extraído
-        # (Para implementar depois se necessário)
+        # 3. INSUMOS: Extrair do texto bruto se OpenAI não conseguiu
+        texto_original = dados.get('_texto_original', '')
+        
+        # Verificar se pelo menos lote1 está vazio
+        if boletim.get('lote1') is None and boletim.get('insumo1') is None:
+            print(f"[POS-PROC] 📦 Extraindo insumos do texto bruto...")
+            
+            # Extrair LOTE1, INSUMO1, QUANTIDADE1
+            import re
+            
+            lote1_match = re.search(r'LOTE1:\s*([^\n\r]+)', texto_original, re.IGNORECASE)
+            if lote1_match:
+                boletim['lote1'] = lote1_match.group(1).strip()
+                print(f"[POS-PROC] 📦 LOTE1 extraído: {boletim['lote1']}")
+            
+            insumo1_match = re.search(r'INSUMO1:\s*([^\n\r]+)', texto_original, re.IGNORECASE)
+            if insumo1_match:
+                boletim['insumo1'] = insumo1_match.group(1).strip()
+                print(f"[POS-PROC] 📦 INSUMO1 extraído: {boletim['insumo1']}")
+            
+            quantidade1_match = re.search(r'QUANTIDADE1:\s*([^\n\r]+)', texto_original, re.IGNORECASE)
+            if quantidade1_match:
+                quantidade_str = quantidade1_match.group(1).strip().replace(',', '.')
+                try:
+                    boletim['quantidade1'] = float(quantidade_str)
+                    print(f"[POS-PROC] 📦 QUANTIDADE1 extraída: {boletim['quantidade1']}")
+                except ValueError:
+                    print(f"[POS-PROC] ⚠️ Erro ao converter quantidade1: {quantidade_str}")
+            
+            # Extrair LOTE2, INSUMO2, QUANTIDADE2 se existirem
+            lote2_match = re.search(r'LOTE2:\s*([^\n\r]+)', texto_original, re.IGNORECASE)
+            if lote2_match and lote2_match.group(1).strip():
+                boletim['lote2'] = lote2_match.group(1).strip()
+                print(f"[POS-PROC] 📦 LOTE2 extraído: {boletim['lote2']}")
+            
+            insumo2_match = re.search(r'INSUMO2:\s*([^\n\r]+)', texto_original, re.IGNORECASE)
+            if insumo2_match and insumo2_match.group(1).strip():
+                boletim['insumo2'] = insumo2_match.group(1).strip()
+                print(f"[POS-PROC] 📦 INSUMO2 extraído: {boletim['insumo2']}")
+            
+            quantidade2_match = re.search(r'QUANTIDADE2:\s*([^\n\r]+)', texto_original, re.IGNORECASE)
+            if quantidade2_match and quantidade2_match.group(1).strip():
+                quantidade_str = quantidade2_match.group(1).strip().replace(',', '.')
+                try:
+                    boletim['quantidade2'] = float(quantidade_str)
+                    print(f"[POS-PROC] 📦 QUANTIDADE2 extraída: {boletim['quantidade2']}")
+                except ValueError:
+                    print(f"[POS-PROC] ⚠️ Erro ao converter quantidade2: {quantidade_str}")
+        
+        # 4. STATUS CAMPO: Extrair do texto se não foi extraído pelo OpenAI
+        if boletim.get('status_campo') is None:
+            status_match = re.search(r'STATUS:\s*([^\n\r]+)', texto_original, re.IGNORECASE)
+            if status_match:
+                boletim['status_campo'] = status_match.group(1).strip().upper()
+                print(f"[POS-PROC] 📊 STATUS extraído do texto: {boletim['status_campo']}")
+        
+        # 5. AREA RESTANTE: Extrair do texto se não foi extraído pelo OpenAI
+        if boletim.get('area_restante') is None:
+            area_restante_match = re.search(r'AREA\s*RESTANTE:\s*([^\n\r]+)', texto_original, re.IGNORECASE)
+            if area_restante_match:
+                try:
+                    area_str = area_restante_match.group(1).strip().replace(',', '.')
+                    boletim['area_restante'] = float(area_str)
+                    print(f"[POS-PROC] 📏 AREA RESTANTE extraída do texto: {boletim['area_restante']}")
+                except ValueError:
+                    print(f"[POS-PROC] ⚠️ Erro ao converter area_restante: {area_restante_match.group(1)}")
+        
+        # (Manter lógica existente para cálculo de área restante e status se ainda None)
+        # ... resto da lógica existente ...
         
         dados['boletim'] = boletim
         print(f"[POS-PROC] ✅ Pós-processamento concluído")

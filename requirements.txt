@@ -11,6 +11,9 @@ pyodbc==4.0.35
 # Timezone
 pytz==2023.3
 
+# Variáveis de ambiente
+python-dotenv==1.0.0
+
 # Processamento de áudio
 librosa==0.10.1
 soundfile==0.12.1
