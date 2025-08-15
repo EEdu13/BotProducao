@@ -1315,11 +1315,16 @@ def webhook():
             print(f"[DEBUG] Processando TEXTO: '{mensagem[:50]}...'")
             
             # ========== VERIFICAÇÃO DE PRÉ-APONTAMENTO ==========
+            print(f"[DEBUG] 🔍 Verificando se é pré-apontamento...")
             resultado_pre_apont = processar_pre_apontamento(numero, mensagem_original)
+            print(f"[DEBUG] 📊 Resultado pré-apont: {resultado_pre_apont}")
+            
             if resultado_pre_apont['is_pre_apont']:
                 print(f"[DEBUG] 📋 PRÉ-APONTAMENTO detectado")
                 enviar_mensagem(numero, resultado_pre_apont['resposta'])
                 return '', 200
+            else:
+                print(f"[DEBUG] ➡️ Não é pré-apontamento, continuando...")
             
             if mensagem in ["oi", "menu"]:
                 enviar_menu(numero)
@@ -1415,6 +1420,43 @@ try:
 except Exception as e:
     print(f"❌ Erro na inicialização: {e}")
     print("🔄 Bot continuará tentando conectar...")
+
+@app.route('/webhook_pre_apont', methods=['POST'])
+def webhook_pre_apontamento_dedicado():
+    """Webhook dedicado APENAS para pré-apontamento"""
+    try:
+        dados = request.json
+        print(f"[PRE-BOT] ========== WEBHOOK PRÉ-APONTAMENTO ==========")
+        print(f"[PRE-BOT] Número: {dados.get('phone')}")
+        print(f"[PRE-BOT] Tipo: {dados.get('type', 'UNKNOWN')}")
+        
+        numero = dados.get("phone")
+        
+        # Apenas processar se for mensagem de texto
+        if dados.get("type") == "text" and dados.get("text", {}).get("message"):
+            mensagem_original = dados["text"]["message"].strip()
+            
+            print(f"[PRE-BOT] 📝 Mensagem: '{mensagem_original[:100]}...'")
+            print(f"[PRE-BOT] 🔍 Processando com pré-apontamento...")
+            
+            resultado_pre_apont = processar_pre_apontamento(numero, mensagem_original)
+            
+            print(f"[PRE-BOT] 📊 Resultado: {resultado_pre_apont}")
+            
+            if resultado_pre_apont['is_pre_apont']:
+                print(f"[PRE-BOT] ✅ PRÉ-APONTAMENTO detectado!")
+                enviar_mensagem(numero, resultado_pre_apont['resposta'])
+                print(f"[PRE-BOT] 📤 Resposta enviada")
+            else:
+                print(f"[PRE-BOT] ➡️ Não é pré-apontamento")
+        
+        return '', 200
+        
+    except Exception as e:
+        print(f"[PRE-BOT] ❌ ERRO: {e}")
+        import traceback
+        traceback.print_exc()
+        return '', 500
 
 if __name__ == '__main__':
     print("🤖 Bot Integrado - Produção + Frete (Texto + Áudio) iniciando...")
