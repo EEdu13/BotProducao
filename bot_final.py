@@ -1505,10 +1505,39 @@ def webhook_pre_apontamento_dedicado():
             mensagem_original = dados["text"]["message"].strip()
         elif dados.get("message"):  # Fallback
             mensagem_original = str(dados.get("message")).strip()
-        
+
         if mensagem_original:
             print(f"[PRE-BOT] 📝 Mensagem: '{mensagem_original[:100]}...'")
-            print(f"[PRE-BOT] 🔍 Processando com pré-apontamento...")
+            
+            # 🆕 PRIMEIRO: Verificar se é resposta de coordenador (SIM/NAO/CORRIGIR)
+            from pre_apontamento import detectar_resposta_coordenador
+            
+            resposta_coord = detectar_resposta_coordenador(mensagem_original, numero)
+            
+            if resposta_coord['is_resposta_coord']:
+                print(f"[PRE-BOT] ✅ RESPOSTA DE COORDENADOR detectada!")
+                print(f"[PRE-BOT] 🎯 Ação: {resposta_coord.get('acao')} para RAW_ID {resposta_coord.get('raw_id')}")
+                
+                from pre_apontamento import processar_aprovacao_coordenador
+                
+                resultado = processar_aprovacao_coordenador(
+                    button_id=resposta_coord['button_id'],
+                    telefone_coordenador=numero,
+                    mensagem_adicional=""
+                )
+                
+                if resultado:
+                    print(f"[PRE-BOT] ✅ Aprovação processada!")
+                    resposta = "✅ Sua resposta foi processada com sucesso!"
+                else:
+                    print(f"[PRE-BOT] ❌ Erro na aprovação")
+                    resposta = "❌ Erro ao processar sua resposta. Tente novamente."
+                
+                enviar_mensagem(numero, resposta)
+                return '', 200
+            
+            # Se não for resposta de coordenador, processar como pré-apontamento normal
+            print(f"[PRE-BOT] 🔍 Processando como pré-apontamento...")
             
             resultado_pre_apont = processar_pre_apontamento(numero, mensagem_original)
             

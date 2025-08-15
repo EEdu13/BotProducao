@@ -609,7 +609,109 @@ def buscar_coordenador(projeto):
         print(f"[ERRO] Falha ao buscar coordenador: {e}")
         return None
 
+def enviar_notificacao_coordenador_texto(telefone_coord, dados_resumo, raw_id, telefone_remetente=None):
+    """Envia notificação para o coordenador usando TEXTO SIMPLES (SIM/NAO/CORRIGIR)"""
+    try:
+        print(f"[NOTIF] 🚀 Iniciando envio de notificação TEXTO para coordenador")
+        print(f"[NOTIF] 📞 Telefone coordenador: {telefone_coord}")
+        print(f"[NOTIF] 🔢 RAW_ID: {raw_id}")
+        print(f"[NOTIF] 📱 Telefone remetente: {telefone_remetente}")
+        
+        import requests
+        
+        if not all([INSTANCE_ID, TOKEN, telefone_coord]):
+            print(f"[NOTIF] ❌ Dados Z-API incompletos!")
+            return False
+
+        # Buscar nome do remetente
+        nome_remetente = "Usuário"
+        try:
+            conn = conectar_db()
+            cursor = conn.cursor()
+            query = "SELECT USUARIO FROM USUARIOS WHERE TELEFONE = ?"
+            cursor.execute(query, (telefone_remetente,))
+            resultado = cursor.fetchone()
+            if resultado:
+                nome_remetente = resultado[0]
+            conn.close()
+        except:
+            pass
+
+        # Formatar valores
+        valor_ganho = dados_resumo.get('valor_ganho')
+        valor_ganho_str = f"R$ {valor_ganho:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if valor_ganho else "N/A"
+        
+        diaria_colaborador = dados_resumo.get('diaria_colaborador')
+        diaria_str = f"R$ {diaria_colaborador:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if diaria_colaborador else "N/A"
+        
+        # Formatar data
+        data_execucao = dados_resumo.get('data_execucao', '')
+        if data_execucao:
+            try:
+                data_obj = datetime.strptime(data_execucao, '%Y-%m-%d')
+                data_formatada = data_obj.strftime('%d/%m/%Y')
+            except:
+                data_formatada = data_execucao
+        else:
+            data_formatada = datetime.now().strftime('%d/%m/%Y')
+
+        telefone_formatado = telefone_remetente[-4:] if telefone_remetente else "****"
+
+        mensagem = f"""🚨 *NOVO PRÉ-APONTAMENTO #{raw_id}*
+👤 *Enviado por:* {nome_remetente} (...{telefone_formatado})
+🏗️ *Projeto:* {dados_resumo.get('projeto', 'N/A')} - {dados_resumo.get('empresa', 'N/A')}
+📅 *Data:* {data_formatada}
+🌱 *Serviço:* {dados_resumo.get('servico', 'N/A')}
+📍 *Fazenda:* {dados_resumo.get('fazenda', 'N/A')} - Talhão {dados_resumo.get('talhao', 'N/A')}
+📏 *Área:* {dados_resumo.get('area_realizada', 0)}/{dados_resumo.get('area_total', 0)} ha
+💰 *Valor ganho:* {valor_ganho_str}
+👷 *Diária colaborador:* {diaria_str}
+
+*OBS:* {dados_resumo.get('observacoes', 'Sem observações')}
+
+⚡ *RESPONDA COM:*
+• *SIM {raw_id}* - Para APROVAR
+• *NAO {raw_id}* - Para REJEITAR  
+• *CORRIGIR {raw_id}* - Para solicitar correção
+
+_Exemplo: SIM {raw_id}_"""
+
+        # Enviar via Z-API texto simples
+        url_send = f"https://api.z-api.io/instances/{INSTANCE_ID}/token/{TOKEN}/send-text"
+        
+        payload = {
+            "phone": telefone_coord,
+            "message": mensagem
+        }
+        
+        headers = {
+            "Content-Type": "application/json",
+            "Client-Token": CLIENT_TOKEN
+        }
+        
+        print(f"[NOTIF] 📡 Enviando notificação TEXTO...")
+        response = requests.post(url_send, json=payload, headers=headers)
+        
+        print(f"[NOTIF] 📊 Status: {response.status_code}")
+        print(f"[NOTIF] 📄 Resposta: {response.text[:200]}")
+        
+        sucesso = response.status_code == 200
+        if sucesso:
+            print(f"[NOTIF] ✅ Notificação TEXTO enviada com sucesso!")
+        else:
+            print(f"[NOTIF] ❌ Falha no envio da notificação TEXTO!")
+            
+        return sucesso
+        
+    except Exception as e:
+        print(f"[NOTIF] ❌ ERRO CRÍTICO no envio: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
 def enviar_notificacao_coordenador(telefone_coord, dados_resumo, raw_id, telefone_remetente=None):
+    """VERSÃO ATUALIZADA: Envia notificação usando TEXTO ao invés de botões"""
+    return enviar_notificacao_coordenador_texto(telefone_coord, dados_resumo, raw_id, telefone_remetente)
     """Envia notificação para o coordenador com botões de aprovação"""
     try:
         import requests
@@ -870,7 +972,114 @@ TESTE BÁSICO
     resultado = processar_pre_apontamento("5511999999999", texto_teste)
     print(f"Teste: {resultado}")
 
-def processar_aprovacao_coordenador(button_id, telefone_coordenador, mensagem_adicional=""):
+def detectar_resposta_coordenador(texto, telefone_coordenador):
+    """
+    Detecta se a mensagem é uma resposta de aprovação do coordenador
+    Formatos aceitos: SIM 48, NAO 48, CORRIGIR 48
+    """
+    try:
+        print(f"[COORD-RESP] 🔍 Analisando resposta: '{texto}'")
+        
+        # Normalizar texto
+        texto_limpo = texto.upper().strip()
+        palavras = texto_limpo.split()
+        
+        print(f"[COORD-RESP] 📝 Palavras: {palavras}")
+        
+        # Verificar padrões: ACAO + NUMERO
+        if len(palavras) >= 2:
+            acao = palavras[0]
+            
+            # Tentar extrair número (pode ser qualquer palavra que contenha dígitos)
+            raw_id = None
+            for palavra in palavras[1:]:
+                if palavra.isdigit():
+                    raw_id = palavra
+                    break
+                # Também aceitar números dentro de texto (ex: "SIM48", "NAO48")
+                import re
+                numeros = re.findall(r'\d+', palavra)
+                if numeros:
+                    raw_id = numeros[0]
+                    break
+            
+            if raw_id and acao in ['SIM', 'NAO', 'CORRIGIR']:
+                print(f"[COORD-RESP] ✅ Resposta detectada: {acao} para RAW_ID {raw_id}")
+                
+                # Verificar se o coordenador tem permissão para este RAW_ID
+                if verificar_permissao_coordenador(telefone_coordenador, raw_id):
+                    
+                    # Converter para formato de button_id para compatibilidade
+                    button_id_map = {
+                        'SIM': f'aprovar_{raw_id}',
+                        'NAO': f'rejeitar_{raw_id}',
+                        'CORRIGIR': f'corrigir_{raw_id}'
+                    }
+                    
+                    button_id = button_id_map[acao]
+                    print(f"[COORD-RESP] 🎯 Processando como: {button_id}")
+                    
+                    return {
+                        'is_resposta_coord': True,
+                        'button_id': button_id,
+                        'acao': acao,
+                        'raw_id': raw_id
+                    }
+                else:
+                    print(f"[COORD-RESP] ❌ Coordenador sem permissão para RAW_ID {raw_id}")
+                    return {
+                        'is_resposta_coord': False,
+                        'erro': 'Sem permissão para este apontamento'
+                    }
+            else:
+                print(f"[COORD-RESP] ⚠️ Formato inválido - Ação: {acao}, RAW_ID: {raw_id}")
+        
+        print(f"[COORD-RESP] ➡️ Não é resposta de coordenador")
+        return {'is_resposta_coord': False}
+        
+    except Exception as e:
+        print(f"[COORD-RESP] ❌ ERRO: {e}")
+        return {'is_resposta_coord': False, 'erro': str(e)}
+
+def verificar_permissao_coordenador(telefone_coordenador, raw_id):
+    """Verifica se o coordenador tem permissão para aprovar este RAW_ID"""
+    try:
+        conn = conectar_db()
+        cursor = conn.cursor()
+        
+        # Buscar projeto do RAW_ID
+        query_projeto = "SELECT PROJETO FROM PRE_APONTAMENTO_RAW WHERE ID = ?"
+        cursor.execute(query_projeto, (raw_id,))
+        resultado = cursor.fetchone()
+        
+        if not resultado:
+            print(f"[PERM] ❌ RAW_ID {raw_id} não encontrado")
+            conn.close()
+            return False
+            
+        projeto = resultado[0]
+        print(f"[PERM] 📊 RAW_ID {raw_id} é do projeto {projeto}")
+        
+        # Verificar se coordenador tem permissão para este projeto
+        query_coord = """
+        SELECT COUNT(*) FROM USUARIOS 
+        WHERE TELEFONE = ? AND PROJETO = ? AND PERFIL = 'COORDENADOR'
+        """
+        cursor.execute(query_coord, (telefone_coordenador, projeto))
+        tem_permissao = cursor.fetchone()[0] > 0
+        
+        conn.close()
+        
+        if tem_permissao:
+            print(f"[PERM] ✅ Coordenador autorizado para projeto {projeto}")
+        else:
+            print(f"[PERM] ❌ Coordenador SEM permissão para projeto {projeto}")
+            
+        return tem_permissao
+        
+    except Exception as e:
+        print(f"[PERM] ❌ ERRO na verificação: {e}")
+        return False
     """
     Processa a resposta do coordenador (APROVAR, REJEITAR, CORRIGIR)
     
