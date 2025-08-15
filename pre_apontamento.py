@@ -1076,21 +1076,35 @@ def verificar_permissao_coordenador(telefone_coordenador, raw_id):
         cursor = conn.cursor()
         
         # Buscar projeto do RAW_ID
-        query_projeto = "SELECT PROJETO FROM PRE_APONTAMENTO_RAW WHERE ID = ?"
-        print(f"[PERM] 📝 Query projeto: {query_projeto}")
+        # TEMPORÁRIO: usar dados do CONTEUDO_BRUTO para extrair projeto
+        query_raw = "SELECT CONTEUDO_BRUTO FROM PRE_APONTAMENTO_RAW WHERE ID = ?"
+        print(f"[PERM] 📝 Query RAW (temporária): {query_raw}")
         print(f"[PERM] 📝 Parâmetro: {raw_id}")
         
-        cursor.execute(query_projeto, (raw_id,))
-        resultado = cursor.fetchone()
+        cursor.execute(query_raw, (raw_id,))
+        resultado_raw = cursor.fetchone()
         
-        print(f"[PERM] 📊 Resultado query projeto: {resultado}")
+        print(f"[PERM] 📊 Resultado query RAW: {resultado_raw}")
         
-        if not resultado:
+        if not resultado_raw:
             print(f"[PERM] ❌ RAW_ID {raw_id} não encontrado na tabela PRE_APONTAMENTO_RAW")
             conn.close()
             return False
             
-        projeto = resultado[0]
+        conteudo_bruto = resultado_raw[0]
+        print(f"[PERM] 📄 Conteúdo bruto: {conteudo_bruto[:200]}...")
+        
+        # Extrair projeto do JSON do conteúdo bruto
+        try:
+            import json
+            dados = json.loads(conteudo_bruto)
+            projeto = dados.get('projeto', '830')  # Default 830 se não encontrar
+            print(f"[PERM] ✅ Projeto extraído do JSON: {projeto}")
+        except:
+            # Se não conseguir parsear JSON, assumir projeto padrão
+            projeto = '830'
+            print(f"[PERM] ⚠️ Usando projeto padrão: {projeto}")
+            
         print(f"[PERM] ✅ RAW_ID {raw_id} é do projeto: {projeto}")
         
         # Verificar se coordenador tem permissão para este projeto
@@ -1214,19 +1228,16 @@ def aprovar_pre_apontamento(raw_id, telefone_coordenador, telefone_usuario, obse
         cursor = conn.cursor()
         print(f"[APRV] ✅ Conexão estabelecida")
         
-        # 1. Atualizar status na tabela RAW
+        # 1. Atualizar status na tabela RAW (versão simplificada)
         query_update = """
         UPDATE PRE_APONTAMENTO_RAW 
-        SET STATUS = 'APROVADO',
-            APROVADO_POR = ?,
-            DATA_APROVACAO = ?,
-            OBSERVACOES_APROVACAO = ?
+        SET STATUS = 'APROVADO'
         WHERE ID = ?
         """
-        print(f"[APRV] 📝 Query UPDATE: {query_update}")
-        print(f"[APRV] 📝 Parâmetros: coordenador={telefone_coordenador}, timestamp={timestamp}, obs={observacoes}, id={raw_id}")
+        print(f"[APRV] 📝 Query UPDATE (simplificada): {query_update}")
+        print(f"[APRV] 📝 Parâmetros: id={raw_id}")
         
-        cursor.execute(query_update, (telefone_coordenador, timestamp, observacoes, raw_id))
+        cursor.execute(query_update, (raw_id,))
         rows_affected = cursor.rowcount
         print(f"[APRV] 📊 Linhas afetadas pelo UPDATE: {rows_affected}")
         
@@ -1294,16 +1305,13 @@ def rejeitar_pre_apontamento(raw_id, telefone_coordenador, telefone_usuario, mot
         conn = conectar_db()
         cursor = conn.cursor()
         
-        # 1. Atualizar status na tabela RAW
+        # 1. Atualizar status na tabela RAW (versão simplificada)
         query_update = """
         UPDATE PRE_APONTAMENTO_RAW 
-        SET STATUS = 'REJEITADO',
-            APROVADO_POR = ?,
-            DATA_APROVACAO = ?,
-            OBSERVACOES_APROVACAO = ?
+        SET STATUS = 'REJEITADO'
         WHERE ID = ?
         """
-        cursor.execute(query_update, (telefone_coordenador, timestamp, motivo, raw_id))
+        cursor.execute(query_update, (raw_id))
         print(f"[APRV] ✅ Status atualizado para REJEITADO")
         
         # 2. Remover dados das tabelas STAGING (opcional - pode manter para histórico)
@@ -1335,16 +1343,13 @@ def solicitar_correcao_pre_apontamento(raw_id, telefone_coordenador, telefone_us
         conn = conectar_db()
         cursor = conn.cursor()
         
-        # 1. Atualizar status na tabela RAW
+        # 1. Atualizar status na tabela RAW (versão simplificada)
         query_update = """
         UPDATE PRE_APONTAMENTO_RAW 
-        SET STATUS = 'CORRECAO_SOLICITADA',
-            APROVADO_POR = ?,
-            DATA_APROVACAO = ?,
-            OBSERVACOES_APROVACAO = ?
+        SET STATUS = 'CORRECAO_SOLICITADA'
         WHERE ID = ?
         """
-        cursor.execute(query_update, (telefone_coordenador, timestamp, solicitacao, raw_id))
+        cursor.execute(query_update, (raw_id))
         print(f"[APRV] ✅ Status atualizado para CORRECAO_SOLICITADA")
         
         conn.commit()
@@ -1545,4 +1550,70 @@ def verificar_aprovacao_raw_50():
         return True
     else:
         print("⚠️ RAW_ID 50 ainda não foi aprovado ou houve erro")
+        return False
+
+def processar_aprovacao_coordenador(button_id, telefone_coordenador, mensagem_adicional=""):
+    """
+    Processa a resposta do coordenador (APROVAR, REJEITAR, CORRIGIR)
+    
+    Args:
+        button_id: ID do botão clicado (ex: "aprovar_48", "rejeitar_48")
+        telefone_coordenador: Telefone do coordenador que respondeu
+        mensagem_adicional: Observações adicionais do coordenador
+    """
+    try:
+        print(f"[APRV] ========== PROCESSANDO APROVAÇÃO ==========")
+        print(f"[APRV] 🔘 Button ID: {button_id}")
+        print(f"[APRV] 📞 Coordenador: {telefone_coordenador}")
+        print(f"[APRV] 💬 Mensagem adicional: {mensagem_adicional}")
+        
+        # Extrair ação e RAW_ID do button_id
+        partes = button_id.split('_')
+        if len(partes) != 2:
+            print(f"[APRV] ❌ Button ID inválido: {button_id}")
+            return False
+            
+        acao = partes[0].upper()  # APROVAR, REJEITAR, CORRIGIR
+        raw_id = partes[1]
+        
+        print(f"[APRV] 🔄 Ação: {acao}, RAW_ID: {raw_id}")
+        
+        # Verificar se o RAW_ID existe e buscar telefone do usuário
+        conn = conectar_db()
+        cursor = conn.cursor()
+        
+        query_check = "SELECT ID, PHONE FROM PRE_APONTAMENTO_RAW WHERE ID = ?"
+        cursor.execute(query_check, (raw_id,))
+        registro = cursor.fetchone()
+        
+        if not registro:
+            print(f"[APRV] ❌ RAW_ID {raw_id} não encontrado")
+            conn.close()
+            return False
+            
+        raw_id_db, telefone_usuario = registro
+        print(f"[APRV] ✅ Registro encontrado - Usuário: {telefone_usuario}")
+        
+        conn.close()
+        
+        # Processar de acordo com a ação
+        timestamp_agora = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        if acao == "APROVAR":
+            return aprovar_pre_apontamento(raw_id, telefone_coordenador, telefone_usuario, mensagem_adicional, timestamp_agora)
+            
+        elif acao == "REJEITAR":
+            return rejeitar_pre_apontamento(raw_id, telefone_coordenador, telefone_usuario, mensagem_adicional, timestamp_agora)
+            
+        elif acao == "CORRIGIR":
+            return solicitar_correcao_pre_apontamento(raw_id, telefone_coordenador, telefone_usuario, mensagem_adicional, timestamp_agora)
+            
+        else:
+            print(f"[APRV] ❌ Ação não reconhecida: {acao}")
+            return False
+            
+    except Exception as e:
+        print(f"[APRV] ❌ ERRO no processamento de aprovação: {e}")
+        import traceback
+        traceback.print_exc()
         return False
