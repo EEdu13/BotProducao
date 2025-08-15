@@ -180,9 +180,10 @@ INSTRUÇÕES IMPORTANTES:
    - "talão" → "TALHÃO"
    - Nomes de fazendas devem estar em MAIÚSCULAS
    - Códigos técnicos como "TALHÃO: 001" devem manter formato "CAMPO: VALOR"
-3. Se algum campo estiver em branco, deixe como string vazia ""
-4. Para prêmios, se não houver dados específicos, retorne lista vazia []
-5. Mantenha sempre o formato JSON válido
+3. DATAS: Se encontrar "HOJE", "DATA: HOJE" ou similar, use "{datetime.now().strftime('%Y-%m-%d')}"
+4. Se algum campo estiver em branco, deixe como string vazia ""
+5. Para prêmios, se não houver dados específicos, retorne lista vazia []
+6. Mantenha sempre o formato JSON válido
 
 TEXTO PARA PROCESSAR:
 {texto}
@@ -190,7 +191,7 @@ TEXTO PARA PROCESSAR:
 RESPONDA APENAS COM JSON VÁLIDO no formato:
 {{
   "boletim": {{
-    "data_execucao": "YYYY-MM-DD",
+    "data_execucao": "{datetime.now().strftime('%Y-%m-%d')}",
     "projeto": "",
     "empresa": "",
     "servico": "",
@@ -477,11 +478,15 @@ def salvar_boletim_staging(dados_boletim, raw_id):
         conn = conectar_db()
         cursor = conn.cursor()
         
-        # Converter "HOJE" para data atual
+        # Converter "HOJE" ou formatos problemáticos para data atual
         data_execucao = dados_boletim.get('data_execucao')
-        if data_execucao and data_execucao.upper() == 'HOJE':
+        if data_execucao:
+            if data_execucao.upper() == 'HOJE' or data_execucao == 'YYYY-MM-DD':
+                data_execucao = datetime.now().strftime('%Y-%m-%d')
+                print(f"[SQL] Data convertida: {dados_boletim.get('data_execucao')} -> {data_execucao}")
+        else:
             data_execucao = datetime.now().strftime('%Y-%m-%d')
-            print(f"[SQL] Data convertida: HOJE -> {data_execucao}")
+            print(f"[SQL] Data ausente, usando hoje: {data_execucao}")
         
         print(f"[SQL] 💾 Salvando boletim com RAW_ID: {raw_id}")
         print(f"[SQL] Data final: {data_execucao}")
