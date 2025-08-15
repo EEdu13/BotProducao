@@ -441,7 +441,11 @@ def verificar_rateio_e_aplicar_logica(texto, dados_extraidos):
     """
     try:
         alertas = []
-        dados_corrigidos = dados_extraidos.copy()
+        import copy
+        dados_corrigidos = copy.deepcopy(dados_extraidos)  # Cópia profunda para modificar arrays aninhados
+        
+        print(f"[RATEIO] 📊 Dados originais - Prêmios: {len(dados_extraidos.get('premios', []))}")
+        print(f"[RATEIO] 📊 Dados copiados - Prêmios: {len(dados_corrigidos.get('premios', []))}")
         
         # Extrair área realizada para cálculos
         area_realizada = dados_extraidos.get('boletim', {}).get('area_realizada', 0)
@@ -468,10 +472,14 @@ def verificar_rateio_e_aplicar_logica(texto, dados_extraidos):
                 producao_automatica = round(area_realizada / total_colaboradores, 2) if total_colaboradores > 0 else 0
                 
                 # Aplicar rateio automático
+                aplicados = 0
                 for i, premio in enumerate(dados_corrigidos.get('premios', [])):
                     if premio.get('categoria') == 'RATEIO_MANUAL':
                         premio['producao'] = producao_automatica
+                        aplicados += 1
+                        print(f"[RATEIO] ✅ Aplicado {producao_automatica} para {premio.get('colaborador_id')}")
                 
+                print(f"[RATEIO] 📊 Total aplicações: {aplicados}")
                 alertas.append(f"✅ RATEIO AUTOMÁTICO aplicado: {producao_automatica} por colaborador")
             
             # CASO 2: Parcialmente preenchido - INCONSISTÊNCIA
@@ -925,6 +933,12 @@ def processar_pre_apontamento(numero, texto):
         
         # 6. Salvar PREMIO_STAGING
         premios = dados_corrigidos.get('premios', [])
+        print(f"[PRE-APONT] 🏆 Total prêmios para salvar: {len(premios)}")
+        
+        # Debug: mostrar os primeiros 3 prêmios
+        for i, premio in enumerate(premios[:3]):
+            print(f"[PRE-APONT] 🏆 Prêmio {i+1}: {premio.get('categoria')} | Colaborador: {premio.get('colaborador_id')} | Produção: {premio.get('producao')}")
+        
         if premios and not salvar_premios_staging(premios, raw_id):
             return {
                 'is_pre_apont': True,
@@ -961,7 +975,7 @@ def processar_pre_apontamento(numero, texto):
 🔧 *SERVIÇO:* {dados_boletim.get('servico', 'N/A')}
 🌾 *FAZENDA:* {dados_boletim.get('fazenda', 'N/A')}
 📍 *TALHÃO:* {dados_boletim.get('talhao', 'N/A')}
-📅 *DATA:* {dados_boletim.get('data_execucao', 'N/A')}
+📅 *DATA:* {formatar_data_amigavel(dados_boletim.get('data_execucao', 'N/A'))}
 
 📏 *ÁREA REALIZADA:* {dados_boletim.get('area_realizada', 0)}
 📐 *ÁREA TOTAL:* {dados_boletim.get('area_total', 0)}
@@ -1499,7 +1513,7 @@ def notificar_coordenador_confirmacao(telefone_coordenador, raw_id, acao):
 
 Pré-apontamento #{raw_id} foi {acao.lower()}.
 
-📅 *Processado em:* {datetime.now().strftime('%d/%m/%Y às %H:%M')}
+📅 *Processado em:* {formatar_data_amigavel(obter_data_brasilia())}
 
 ✅ O usuário foi notificado automaticamente."""
 
