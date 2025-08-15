@@ -125,7 +125,7 @@ def salvar_raw(telefone, conteudo_bruto, hash_msg):
 def extrair_dados_com_openai(texto):
     """Usa OpenAI para extrair e estruturar os dados do pré-apontamento"""
     try:
-        print(f"[OPENAI] Iniciando extração de dados...")
+        print(f"[OPENAI] 🚀 Iniciando extração de dados...")
         
         if not client:
             print(f"[OPENAI] ❌ Cliente OpenAI não configurado")
@@ -136,6 +136,7 @@ def extrair_dados_com_openai(texto):
             return None
             
         print(f"[OPENAI] ✅ Cliente disponível, preparando prompt...")
+        print(f"[OPENAI] Texto a processar (primeiros 300 chars): {texto[:300]}")
         
         prompt = f"""
 Você é um especialista em extração de dados de pré-apontamentos agrícolas.
@@ -175,6 +176,7 @@ RESPONDA APENAS COM JSON VÁLIDO no formato:
 
         print(f"[OPENAI] Enviando requisição para GPT-3.5-turbo...")
         
+        print(f"[OPENAI] 📤 Enviando requisição para GPT-3.5-turbo...")
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
@@ -190,6 +192,7 @@ RESPONDA APENAS COM JSON VÁLIDO no formato:
         
         conteudo = response.choices[0].message.content.strip()
         print(f"[OPENAI] Processando resposta: {len(conteudo)} caracteres")
+        print(f"[OPENAI] Primeiros 300 chars da resposta: {conteudo[:300]}")
         
         # Limpar possíveis marcadores de código
         if conteudo.startswith('```json'):
@@ -202,6 +205,7 @@ RESPONDA APENAS COM JSON VÁLIDO no formato:
         print(f"[OPENAI] Fazendo parse do JSON...")
         dados = json.loads(conteudo.strip())
         print(f"[OPENAI] ✅ JSON parseado com sucesso!")
+        print(f"[OPENAI] Estrutura: boletim={bool(dados.get('boletim'))}, premios={len(dados.get('premios', []))}")
         
         return dados
         
@@ -679,10 +683,13 @@ def processar_pre_apontamento(numero, texto):
         print(f"[PRE-APONT] Iniciando extração OpenAI...")
         print(f"[PRE-APONT] Verificando API Key: {OPENAI_API_KEY[:20] if OPENAI_API_KEY else 'NONE'}...")
         print(f"[PRE-APONT] Cliente configurado: {'SIM' if client else 'NÃO'}")
+        print(f"[PRE-APONT] Texto para processar (primeiros 200 chars): {texto[:200]}...")
         
         dados_extraidos = extrair_dados_com_openai(texto)
+        print(f"[PRE-APONT] Resultado OpenAI: {type(dados_extraidos)} - {str(dados_extraidos)[:200] if dados_extraidos else 'NONE'}")
+        
         if not dados_extraidos:
-            print(f"[PRE-APONT] ERRO: Falha na extração OpenAI")
+            print(f"[PRE-APONT] ERRO: Falha na extração OpenAI - dados_extraidos é None/False")
             return {
                 'is_pre_apont': True,
                 'status': 'alerta',
