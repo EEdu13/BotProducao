@@ -294,23 +294,44 @@ def processar_campos_faltantes(dados):
             
             # Extrair LOTE2, INSUMO2, QUANTIDADE2 se existirem
             lote2_match = re.search(r'LOTE2:\s*([^\n\r]+)', texto_original, re.IGNORECASE)
-            if lote2_match and lote2_match.group(1).strip():
-                boletim['lote2'] = lote2_match.group(1).strip()
-                print(f"[POS-PROC] 📦 LOTE2 extraído: {boletim['lote2']}")
+            if lote2_match:
+                valor_lote2 = lote2_match.group(1).strip()
+                # Verificar se não é vazio e não é apenas outro campo
+                if valor_lote2 and not valor_lote2.startswith(('INSUMO', 'QUANTIDADE', 'AREA', 'STATUS')):
+                    boletim['lote2'] = valor_lote2
+                    print(f"[POS-PROC] 📦 LOTE2 extraído: {boletim['lote2']}")
+                else:
+                    print(f"[DEBUG] ❌ LOTE2: valor vazio ou inválido: '{valor_lote2}'")
+            else:
+                print(f"[DEBUG] ❌ LOTE2: não encontrado no texto")
             
             insumo2_match = re.search(r'INSUMO2:\s*([^\n\r]+)', texto_original, re.IGNORECASE)
-            if insumo2_match and insumo2_match.group(1).strip():
-                boletim['insumo2'] = insumo2_match.group(1).strip()
-                print(f"[POS-PROC] 📦 INSUMO2 extraído: {boletim['insumo2']}")
+            if insumo2_match:
+                valor_insumo2 = insumo2_match.group(1).strip()
+                # Verificar se não é vazio e não é apenas outro campo
+                if valor_insumo2 and not valor_insumo2.startswith(('QUANTIDADE', 'LOTE', 'AREA', 'STATUS')):
+                    boletim['insumo2'] = valor_insumo2
+                    print(f"[POS-PROC] 📦 INSUMO2 extraído: {boletim['insumo2']}")
+                else:
+                    print(f"[DEBUG] ❌ INSUMO2: valor vazio ou inválido: '{valor_insumo2}'")
+            else:
+                print(f"[DEBUG] ❌ INSUMO2: não encontrado no texto")
             
             quantidade2_match = re.search(r'QUANTIDADE2:\s*([^\n\r]+)', texto_original, re.IGNORECASE)
-            if quantidade2_match and quantidade2_match.group(1).strip():
-                quantidade_str = quantidade2_match.group(1).strip().replace(',', '.')
-                try:
-                    boletim['quantidade2'] = float(quantidade_str)
-                    print(f"[POS-PROC] 📦 QUANTIDADE2 extraída: {boletim['quantidade2']}")
-                except ValueError:
-                    print(f"[POS-PROC] ⚠️ Erro ao converter quantidade2: {quantidade_str}")
+            if quantidade2_match:
+                valor_quantidade2 = quantidade2_match.group(1).strip()
+                # Verificar se não é vazio e não é apenas outro campo
+                if valor_quantidade2 and not valor_quantidade2.startswith(('LOTE', 'INSUMO', 'AREA', 'STATUS')):
+                    quantidade_str = valor_quantidade2.replace(',', '.')
+                    try:
+                        boletim['quantidade2'] = float(quantidade_str)
+                        print(f"[POS-PROC] 📦 QUANTIDADE2 extraída: {boletim['quantidade2']}")
+                    except ValueError:
+                        print(f"[POS-PROC] ⚠️ Erro ao converter quantidade2: {quantidade_str}")
+                else:
+                    print(f"[DEBUG] ❌ QUANTIDADE2: valor vazio ou inválido: '{valor_quantidade2}'")
+            else:
+                print(f"[DEBUG] ❌ QUANTIDADE2: não encontrado no texto")
         
         # 4. STATUS CAMPO: Extrair do texto se não foi extraído pelo OpenAI
         if boletim.get('status_campo') is None:
