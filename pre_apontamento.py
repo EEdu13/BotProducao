@@ -1065,85 +1065,94 @@ def detectar_resposta_coordenador(texto, telefone_coordenador):
         traceback.print_exc()
         return {'is_resposta_coord': False, 'erro': str(e)}
 
+def normalizar_telefone(telefone):
+    """
+    Normaliza telefone removendo espaços, hífens e caracteres especiais
+    """
+    if not telefone:
+        return ""
+    # Remove todos os caracteres não numéricos
+    telefone_limpo = ''.join(filter(str.isdigit, str(telefone)))
+    print(f"[NORM] 📞 '{telefone}' → '{telefone_limpo}'")
+    return telefone_limpo
+
 def verificar_permissao_coordenador(telefone_coordenador, raw_id):
     """Verifica se o coordenador tem permissão para aprovar este RAW_ID"""
     try:
         print(f"[PERM] ========== VERIFICANDO PERMISSÃO ==========")
-        print(f"[PERM] 📞 Telefone coordenador: {telefone_coordenador}")
-        print(f"[PERM] 🔢 RAW_ID: {raw_id}")
+        print(f"[PERM] 📞 Telefone coordenador original: {telefone_coordenador}")
+        
+        # Normalizar telefone do coordenador
+        telefone_normalizado = normalizar_telefone(telefone_coordenador)
+        print(f"[PERM] � Telefone coordenador normalizado: {telefone_normalizado}")
+        print(f"[PERM] �🔢 RAW_ID: {raw_id}")
         
         conn = conectar_db()
         cursor = conn.cursor()
         
         # Buscar projeto do RAW_ID
-        # TEMPORÁRIO: usar dados do CONTEUDO_BRUTO para extrair projeto
         query_raw = "SELECT CONTEUDO_BRUTO FROM PRE_APONTAMENTO_RAW WHERE ID = ?"
-        print(f"[PERM] 📝 Query RAW (temporária): {query_raw}")
+        print(f"[PERM] 📝 Query RAW: {query_raw}")
         print(f"[PERM] 📝 Parâmetro: {raw_id}")
         
         cursor.execute(query_raw, (raw_id,))
         resultado_raw = cursor.fetchone()
         
-        print(f"[PERM] 📊 Resultado query RAW: {resultado_raw}")
-        
         if not resultado_raw:
-            print(f"[PERM] ❌ RAW_ID {raw_id} não encontrado na tabela PRE_APONTAMENTO_RAW")
+            print(f"[PERM] ❌ RAW_ID {raw_id} não encontrado")
             conn.close()
             return False
             
         conteudo_bruto = resultado_raw[0]
-        print(f"[PERM] 📄 Conteúdo bruto: {conteudo_bruto[:200]}...")
+        print(f"[PERM] 📄 Conteúdo: {conteudo_bruto[:100]}...")
         
-        # Extrair projeto do JSON do conteúdo bruto
+        # Extrair projeto
         try:
             import json
             dados = json.loads(conteudo_bruto)
-            projeto = dados.get('projeto', '830')  # Default 830 se não encontrar
-            print(f"[PERM] ✅ Projeto extraído do JSON: {projeto}")
+            projeto = dados.get('projeto', '830')
         except:
-            # Se não conseguir parsear JSON, assumir projeto padrão
             projeto = '830'
-            print(f"[PERM] ⚠️ Usando projeto padrão: {projeto}")
             
-        print(f"[PERM] ✅ RAW_ID {raw_id} é do projeto: {projeto}")
+        print(f"[PERM] ✅ Projeto: {projeto}")
         
-        # Verificar se coordenador tem permissão para este projeto
+        # Buscar todos os coordenadores e normalizar telefones para comparar
         query_coord = """
-        SELECT COUNT(*) FROM USUARIOS 
-        WHERE TELEFONE = ? AND PERFIL = 'COORDENADOR'
+        SELECT TELEFONE, PERFIL, PROJETO, USUARIO FROM USUARIOS 
+        WHERE PERFIL = 'COORDENADOR'
         """
-        print(f"[PERM] 📝 Query coordenador (TEMPORÁRIA - qualquer projeto): {query_coord}")
-        print(f"[PERM] 📝 Parâmetros: telefone={telefone_coordenador}")
+        print(f"[PERM] 📝 Buscando coordenadores...")
         
-        cursor.execute(query_coord, (telefone_coordenador,))
-        count_resultado = cursor.fetchone()
-        tem_permissao = count_resultado[0] > 0
+        cursor.execute(query_coord)
+        coordenadores = cursor.fetchall()
         
-        print(f"[PERM] 📊 Resultado query coordenador: {count_resultado}")
-        print(f"[PERM] 📊 Count: {count_resultado[0]}")
-        print(f"[PERM] 📊 Tem permissão: {tem_permissao}")
+        print(f"[PERM] 📊 Total coordenadores: {len(coordenadores)}")
         
-        # TEMPORÁRIO: Se não encontrar como coordenador, aceitar qualquer usuário do sistema para teste
-        if not tem_permissao:
-            print(f"[PERM] 🔧 MODO TESTE: Verificando se é usuário válido...")
-            query_user = "SELECT COUNT(*) FROM USUARIOS WHERE TELEFONE = ?"
-            cursor.execute(query_user, (telefone_coordenador,))
-            count_user = cursor.fetchone()[0]
-            tem_permissao = count_user > 0
-            print(f"[PERM] 🔧 MODO TESTE: Usuário válido: {tem_permissao}")
+        tem_permissao = False
+        for coord in coordenadores:
+            telefone_db = coord[0]
+            telefone_db_normalizado = normalizar_telefone(telefone_db)
+            projeto_coord = str(coord[2])
+            usuario_coord = coord[3]
+            
+            print(f"[PERM] � Comparando: '{telefone_normalizado}' vs '{telefone_db_normalizado}' (Projeto: {projeto_coord}, Usuario: {usuario_coord})")
+            
+            if telefone_db_normalizado == telefone_normalizado and projeto_coord == projeto:
+                print(f"[PERM] ✅ MATCH! {usuario_coord} autorizado para projeto {projeto}")
+                tem_permissao = True
+                break
         
         conn.close()
         
         if tem_permissao:
-            print(f"[PERM] ✅ Coordenador {telefone_coordenador} AUTORIZADO para projeto {projeto}")
+            print(f"[PERM] ✅ Coordenador AUTORIZADO")
         else:
-            print(f"[PERM] ❌ Coordenador {telefone_coordenador} SEM PERMISSÃO para projeto {projeto}")
-            print(f"[PERM] 🔍 Verificar se telefone e projeto estão corretos na tabela USUARIOS")
+            print(f"[PERM] ❌ Coordenador SEM PERMISSÃO")
             
         return tem_permissao
         
     except Exception as e:
-        print(f"[PERM] ❌ ERRO CRÍTICO na verificação: {e}")
+        print(f"[PERM] ❌ ERRO: {e}")
         import traceback
         traceback.print_exc()
         return False
