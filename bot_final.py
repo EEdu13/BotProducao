@@ -1430,12 +1430,23 @@ def webhook_pre_apontamento_dedicado():
         print(f"[PRE-BOT] Número: {dados.get('phone')}")
         print(f"[PRE-BOT] Tipo: {dados.get('type', 'UNKNOWN')}")
         
-        numero = dados.get("phone")
+        # Log completo dos dados para debug
+        print(f"[PRE-BOT] 🔍 Dados completos: {dados}")
         
-        # Apenas processar se for mensagem de texto
-        if dados.get("type") == "text" and dados.get("text", {}).get("message"):
+        numero = dados.get("phone")
+        tipo_mensagem = dados.get("type")
+        
+        # Verificar se tem mensagem de texto (várias possibilidades)
+        mensagem_original = None
+        
+        if tipo_mensagem == "text" and dados.get("text", {}).get("message"):
             mensagem_original = dados["text"]["message"].strip()
-            
+        elif tipo_mensagem == "ReceivedCallback" and dados.get("text", {}).get("message"):
+            mensagem_original = dados["text"]["message"].strip()
+        elif dados.get("message"):  # Fallback
+            mensagem_original = str(dados.get("message")).strip()
+        
+        if mensagem_original:
             print(f"[PRE-BOT] 📝 Mensagem: '{mensagem_original[:100]}...'")
             print(f"[PRE-BOT] 🔍 Processando com pré-apontamento...")
             
@@ -1449,6 +1460,8 @@ def webhook_pre_apontamento_dedicado():
                 print(f"[PRE-BOT] 📤 Resposta enviada")
             else:
                 print(f"[PRE-BOT] ➡️ Não é pré-apontamento")
+        else:
+            print(f"[PRE-BOT] ⚠️ Sem mensagem de texto para processar")
         
         return '', 200
         
