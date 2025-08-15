@@ -181,9 +181,13 @@ INSTRUÇÕES IMPORTANTES:
    - Nomes de fazendas devem estar em MAIÚSCULAS
    - Códigos técnicos como "TALHÃO: 001" devem manter formato "CAMPO: VALOR"
 3. DATAS: Se encontrar "HOJE", "DATA: HOJE" ou similar, use "{datetime.now().strftime('%Y-%m-%d')}"
-4. Se algum campo estiver em branco, deixe como string vazia ""
-5. Para prêmios, se não houver dados específicos, retorne lista vazia []
-6. Mantenha sempre o formato JSON válido
+4. PRÊMIOS/RATEIO: Extrair colaboradores das seções:
+   - "RATEIO PRODUÇÃO MANUAL" → categoria "RATEIO_MANUAL"
+   - "EQUIPE APOIO ENVOLVIDA" → categoria "APOIO" 
+   - "ESTRUTURA APOIO ENVOLVIDA" → categoria "APOIO"
+5. Para cada colaborador: código (ex: 2508, 2689, TP001), produção (número após hífen), função (texto após PREMIO)
+6. RECEBE_PREMIO: 1 se tem "PREMIO", 0 se vazio
+7. Se algum campo estiver em branco, deixe como string vazia ""
 
 TEXTO PARA PROCESSAR:
 {texto}
@@ -203,7 +207,17 @@ RESPONDA APENAS COM JSON VÁLIDO no formato:
     "diaria_colaborador": 0,
     "observacoes": ""
   }},
-  "premios": []
+  "premios": [
+    {{
+      "categoria": "RATEIO_MANUAL",
+      "colaborador_id": "código extraído",
+      "equipamento": null,
+      "producao": 0,
+      "funcao": "CAMPO",
+      "recebe_premio": 1,
+      "valor_fixo": null
+    }}
+  ]
 }}"""
 
         print(f"[OPENAI] Enviando requisição para GPT-3.5-turbo...")
