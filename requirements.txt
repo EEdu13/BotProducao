@@ -19,5 +19,8 @@ numpy==1.24.3
 # Utilitários
 python-dotenv==1.0.0
 
+# OpenAI para processamento de pré-apontamentos
+openai>=1.0.0
+
 # Gunicorn para produção (Railway/Heroku)
 gunicorn==21.2.0

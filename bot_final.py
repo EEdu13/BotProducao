@@ -10,6 +10,7 @@ import soundfile as sf
 import speech_recognition as sr
 from collections import defaultdict
 import functools
+from pre_apontamento import processar_pre_apontamento
 
 app = Flask(__name__)
 
@@ -1306,11 +1307,19 @@ def webhook():
         # ========== PROCESSAMENTO DE TEXTO ==========
         elif "text" in dados:
             mensagem = dados["text"]["message"].lower().strip()
+            mensagem_original = dados["text"]["message"].strip()  # Manter original para pré-apontamento
             
             if ("trial" in mensagem and "favor desconsiderar" in mensagem) or len(mensagem) > 500:
                 return '', 200
             
             print(f"[DEBUG] Processando TEXTO: '{mensagem[:50]}...'")
+            
+            # ========== VERIFICAÇÃO DE PRÉ-APONTAMENTO ==========
+            resultado_pre_apont = processar_pre_apontamento(numero, mensagem_original)
+            if resultado_pre_apont['is_pre_apont']:
+                print(f"[DEBUG] 📋 PRÉ-APONTAMENTO detectado")
+                enviar_mensagem(numero, resultado_pre_apont['resposta'])
+                return '', 200
             
             if mensagem in ["oi", "menu"]:
                 enviar_menu(numero)
