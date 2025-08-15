@@ -29,9 +29,27 @@ def formatar_data_amigavel(data_str):
         
         # Converter string para datetime
         if isinstance(data_str, str):
-            # Remover microsegundos se existirem
-            data_limpa = data_str.split('.')[0]
-            data_obj = datetime.strptime(data_limpa, '%Y-%m-%d %H:%M:%S')
+            # Tentar diferentes formatos
+            formatos = [
+                '%Y-%m-%d %H:%M:%S',  # 2025-08-15 05:05:59
+                '%Y-%m-%d',           # 2025-08-15
+                '%d/%m/%Y %H:%M',     # 15/08/2025 05:05
+                '%d/%m/%Y'            # 15/08/2025
+            ]
+            
+            data_obj = None
+            for formato in formatos:
+                try:
+                    # Remover microsegundos se existirem
+                    data_limpa = data_str.split('.')[0]
+                    data_obj = datetime.strptime(data_limpa, formato)
+                    break
+                except ValueError:
+                    continue
+            
+            if data_obj is None:
+                print(f"[DATA] ⚠️ Formato não reconhecido: {data_str}")
+                return str(data_str)
         else:
             data_obj = data_str
         
@@ -222,18 +240,25 @@ INSTRUÇÕES IMPORTANTES:
    - Nomes de fazendas devem estar em MAIÚSCULAS
    - Códigos técnicos como "TALHÃO: 001" devem manter formato "CAMPO: VALOR"
 3. DATAS: Se encontrar "HOJE", "DATA: HOJE" ou similar, use "{datetime.now().strftime('%Y-%m-%d')}"
-4. PRÊMIOS/RATEIO: Extrair colaboradores das seções:
-   - "RATEIO PRODUÇÃO MANUAL" → categoria "RATEIO_MANUAL"
+4. PRÊMIOS/RATEIO: Extrair TODOS os colaboradores das seções:
+   - "RATEIO PRODUÇÃO MANUAL" → categoria "RATEIO_MANUAL" 
    - "EQUIPE APOIO ENVOLVIDA" → categoria "APOIO" 
    - "ESTRUTURA APOIO ENVOLVIDA" → categoria "APOIO"
+   - IMPORTANTE: Extrair CADA LINHA que tenha código, mesmo sem produção após hífen
 5. CÓDIGOS: REGRA IMPORTANTE para colaborador_id vs equipamento:
    - Códigos numéricos (ex: 2508, 2689, 0528) = COLABORADORES → "colaborador_id"
    - Códigos TP (ex: TP001, TP009) = EQUIPAMENTOS → "equipamento"
    - Para categoria APOIO com TP: colaborador_id=null, equipamento="TP001"
    - Para categoria RATEIO_MANUAL: colaborador_id="2508", equipamento=null
-6. Para cada colaborador: código, produção (número após hífen), função (texto após PREMIO)
-7. RECEBE_PREMIO: 1 se tem "PREMIO", 0 se vazio
-8. Se algum campo estiver em branco, deixe como string vazia ""
+6. EXEMPLO de extração correta:
+   RATEIO PRODUÇÃO MANUAL
+   2508 - 
+   2509 - 
+   2510 - 
+   Deve gerar 3 prêmios: [{categoria:"RATEIO_MANUAL",colaborador_id:"2508"},{categoria:"RATEIO_MANUAL",colaborador_id:"2509"},{categoria:"RATEIO_MANUAL",colaborador_id:"2510"}]
+7. Para cada colaborador: código, produção (número após hífen), função (texto após PREMIO)
+8. RECEBE_PREMIO: 1 se tem "PREMIO", 0 se vazio
+9. Se algum campo estiver em branco, deixe como string vazia ""
 
 TEXTO PARA PROCESSAR:
 {texto}
