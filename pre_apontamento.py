@@ -105,10 +105,18 @@ def salvar_raw(telefone, conteudo_bruto, hash_msg):
         
         # Recuperar o ID inserido
         cursor.execute("SELECT SCOPE_IDENTITY()")
-        raw_id = cursor.fetchone()[0]
+        resultado = cursor.fetchone()
+        
+        if resultado and resultado[0]:
+            raw_id = int(resultado[0])
+            print(f"[SQL] ✅ RAW salvo com ID: {raw_id}")
+        else:
+            print(f"[SQL] ❌ Falha ao recuperar ID inserido")
+            conn.close()
+            return None
         
         conn.close()
-        return int(raw_id)
+        return raw_id
         
     except Exception as e:
         print(f"[ERRO] Falha ao salvar RAW: {e}")
