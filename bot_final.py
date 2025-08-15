@@ -1422,6 +1422,7 @@ except Exception as e:
     print("🔄 Bot continuará tentando conectar...")
 
 @app.route('/webhook_pre_apont', methods=['POST'])
+@app.route('/webhook_pre_apont', methods=['POST'])
 def webhook_pre_apontamento_dedicado():
     """Webhook dedicado APENAS para pré-apontamento"""
     try:
@@ -1429,6 +1430,16 @@ def webhook_pre_apontamento_dedicado():
         print(f"[PRE-BOT] ========== WEBHOOK PRÉ-APONTAMENTO ==========")
         print(f"[PRE-BOT] Número: {dados.get('phone')}")
         print(f"[PRE-BOT] Tipo: {dados.get('type', 'UNKNOWN')}")
+        
+        # 🚨 VERIFICAÇÃO CRÍTICA: Ignorar mensagens do próprio bot
+        if dados.get('fromMe', False):
+            print(f"[PRE-BOT] ⏭️ Ignorando mensagem do próprio bot (fromMe=True)")
+            return "OK"
+        
+        # 🚨 VERIFICAÇÃO ADICIONAL: Ignorar mensagens da API
+        if dados.get('fromApi', False):
+            print(f"[PRE-BOT] ⏭️ Ignorando mensagem da API (fromApi=True)")
+            return "OK"
         
         # Log completo dos dados para debug
         print(f"[PRE-BOT] 🔍 Dados completos: {dados}")
