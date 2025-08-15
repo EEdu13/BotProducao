@@ -573,11 +573,17 @@ def processar_pre_apontamento(numero, texto):
         print(f"[PRE-APONT] RAW salvo com ID: {raw_id}")
         
         # 4. Extrair dados com OpenAI
+        print(f"[PRE-APONT] Iniciando extração OpenAI...")
         dados_extraidos = extrair_dados_com_openai(texto)
         if not dados_extraidos:
+            print(f"[PRE-APONT] ERRO: Falha na extração OpenAI")
             return {
                 'is_pre_apont': True,
                 'status': 'alerta',
+                'resposta': '⚠️ Falha na análise do texto. Dados salvos para revisão manual.'
+            }
+        
+        print(f"[PRE-APONT] Dados extraídos com sucesso")
                 'resposta': '⚠️ Pré-apontamento recebido, mas houve dificuldade na extração automática. Será analisado manualmente.'
             }
         
