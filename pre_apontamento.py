@@ -108,20 +108,33 @@ def gerar_hash_mensagem(texto, telefone):
 def salvar_raw(telefone, conteudo_bruto, hash_msg):
     """Salva o pré-apontamento bruto na tabela PRE_APONTAMENTO_RAW"""
     try:
+        print(f"[SQL] 🔄 Conectando ao banco...")
         conn = conectar_db()
         cursor = conn.cursor()
+        
+        print(f"[SQL] 📝 Preparando inserção...")
+        print(f"[SQL] Telefone: {telefone}")
+        print(f"[SQL] Hash: {hash_msg}")
+        print(f"[SQL] Conteúdo (primeiros 100 chars): {conteudo_bruto[:100]}")
         
         query = """
         INSERT INTO PRE_APONTAMENTO_RAW (PHONE, CONTEUDO_BRUTO, HASH, STATUS, CREATED_AT)
         VALUES (?, ?, ?, 'PENDENTE', GETDATE())
         """
         
+        print(f"[SQL] 🚀 Executando INSERT...")
         cursor.execute(query, (telefone, conteudo_bruto, hash_msg))
+        print(f"[SQL] ✅ INSERT executado com sucesso")
+        
         conn.commit()
+        print(f"[SQL] ✅ COMMIT realizado")
         
         # Recuperar o ID inserido
+        print(f"[SQL] 🔍 Recuperando SCOPE_IDENTITY()...")
         cursor.execute("SELECT SCOPE_IDENTITY()")
         resultado = cursor.fetchone()
+        
+        print(f"[SQL] Resultado SCOPE_IDENTITY: {resultado}")
         
         if resultado and resultado[0]:
             raw_id = int(resultado[0])
@@ -136,6 +149,8 @@ def salvar_raw(telefone, conteudo_bruto, hash_msg):
         
     except Exception as e:
         print(f"[ERRO] Falha ao salvar RAW: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 def extrair_dados_com_openai(texto):
