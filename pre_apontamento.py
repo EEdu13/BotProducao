@@ -1379,3 +1379,81 @@ def enviar_mensagem_zapi(telefone, mensagem):
     except Exception as e:
         print(f"[ZAPI] ❌ ERRO no envio: {e}")
         return False
+
+def consultar_status_aprovacao(raw_id=None, telefone_coordenador=None):
+    """Consulta status de aprovações"""
+    try:
+        conn = conectar_db()
+        cursor = conn.cursor()
+        
+        if raw_id:
+            # Consultar um RAW_ID específico
+            query = """
+            SELECT ID, STATUS, PROJETO, APROVADO_POR, DATA_APROVACAO, OBSERVACOES_APROVACAO
+            FROM PRE_APONTAMENTO_RAW 
+            WHERE ID = ?
+            """
+            cursor.execute(query, (raw_id,))
+            resultado = cursor.fetchone()
+            
+            if resultado:
+                print(f"📊 RAW_ID {raw_id}:")
+                print(f"   Status: {resultado[1]}")
+                print(f"   Projeto: {resultado[2]}")
+                print(f"   Aprovado por: {resultado[3] or 'Pendente'}")
+                print(f"   Data aprovação: {resultado[4] or 'Pendente'}")
+                print(f"   Observações: {resultado[5] or 'Nenhuma'}")
+                return resultado
+            else:
+                print(f"❌ RAW_ID {raw_id} não encontrado")
+                return None
+                
+        elif telefone_coordenador:
+            # Listar aprovações do coordenador
+            query = """
+            SELECT ID, STATUS, PROJETO, DATA_APROVACAO
+            FROM PRE_APONTAMENTO_RAW 
+            WHERE APROVADO_POR = ?
+            ORDER BY DATA_APROVACAO DESC
+            """
+            cursor.execute(query, (telefone_coordenador,))
+            resultados = cursor.fetchall()
+            
+            print(f"📋 Aprovações do coordenador {telefone_coordenador}:")
+            for r in resultados:
+                print(f"   RAW_ID {r[0]}: {r[1]} - Projeto {r[2]} - {r[3]}")
+            return resultados
+        
+        else:
+            # Listar últimas aprovações
+            query = """
+            SELECT TOP 10 ID, STATUS, PROJETO, APROVADO_POR, DATA_APROVACAO
+            FROM PRE_APONTAMENTO_RAW 
+            WHERE STATUS != 'PENDENTE'
+            ORDER BY DATA_APROVACAO DESC
+            """
+            cursor.execute(query)
+            resultados = cursor.fetchall()
+            
+            print(f"📋 Últimas 10 aprovações:")
+            for r in resultados:
+                print(f"   RAW_ID {r[0]}: {r[1]} - Projeto {r[2]} - Por {r[3]} em {r[4]}")
+            return resultados
+            
+        conn.close()
+        
+    except Exception as e:
+        print(f"❌ Erro na consulta: {e}")
+        return None
+
+def verificar_aprovacao_raw_50():
+    """Verifica especificamente o RAW_ID 50 que acabou de ser aprovado"""
+    print("🔍 VERIFICANDO APROVAÇÃO DO RAW_ID 50:")
+    resultado = consultar_status_aprovacao(raw_id=50)
+    
+    if resultado and resultado[1] == 'APROVADO':
+        print("🎉 SUCESSO! RAW_ID 50 foi aprovado com sucesso!")
+        return True
+    else:
+        print("⚠️ RAW_ID 50 ainda não foi aprovado ou houve erro")
+        return False

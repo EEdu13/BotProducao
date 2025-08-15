@@ -1126,7 +1126,7 @@ def home():
         'status': 'running',
         'version': '2.2 Railway - Sistema Completo',
         'timestamp': datetime.now().isoformat(),
-        'endpoints': ['/webhook', '/webhook_pre_apont', '/webhook_aprovacao', '/health'],
+        'endpoints': ['/webhook', '/webhook_pre_apont', '/webhook_aprovacao', '/health', '/consultar_aprovacao/<raw_id>', '/listar_aprovacoes'],
         'features': ['Produção', 'Frete', 'Áudio STT', 'Pré-Apontamento', 'Aprovação Coordenador']
     }, 200
 
@@ -1560,7 +1560,65 @@ def webhook_pre_apontamento_dedicado():
         traceback.print_exc()
         return '', 500
 
-@app.route('/webhook_aprovacao', methods=['POST'])
+@app.route('/consultar_aprovacao/<int:raw_id>', methods=['GET'])
+def consultar_aprovacao_endpoint(raw_id):
+    """Endpoint para consultar status de aprovação"""
+    try:
+        from pre_apontamento import consultar_status_aprovacao
+        
+        resultado = consultar_status_aprovacao(raw_id=raw_id)
+        
+        if resultado:
+            return {
+                'raw_id': resultado[0],
+                'status': resultado[1],
+                'projeto': resultado[2],
+                'aprovado_por': resultado[3],
+                'data_aprovacao': str(resultado[4]) if resultado[4] else None,
+                'observacoes': resultado[5],
+                'timestamp': datetime.now().isoformat()
+            }, 200
+        else:
+            return {
+                'error': f'RAW_ID {raw_id} não encontrado',
+                'timestamp': datetime.now().isoformat()
+            }, 404
+            
+    except Exception as e:
+        return {
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }, 500
+
+@app.route('/listar_aprovacoes', methods=['GET'])
+def listar_aprovacoes_endpoint():
+    """Endpoint para listar últimas aprovações"""
+    try:
+        from pre_apontamento import consultar_status_aprovacao
+        
+        resultados = consultar_status_aprovacao()
+        
+        aprovacoes = []
+        for r in resultados:
+            aprovacoes.append({
+                'raw_id': r[0],
+                'status': r[1],
+                'projeto': r[2],
+                'aprovado_por': r[3],
+                'data_aprovacao': str(r[4]) if r[4] else None
+            })
+        
+        return {
+            'aprovacoes': aprovacoes,
+            'total': len(aprovacoes),
+            'timestamp': datetime.now().isoformat()
+        }, 200
+        
+    except Exception as e:
+        return {
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }, 500
 def webhook_aprovacao_coordenador():
     """Webhook para processar aprovações de coordenadores (botões)"""
     try:
