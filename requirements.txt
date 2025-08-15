@@ -8,6 +8,9 @@ requests==2.31.0
 # Banco de dados
 pyodbc==4.0.35
 
+# Timezone
+pytz==2023.3
+
 # Processamento de áudio
 librosa==0.10.1
 soundfile==0.12.1

@@ -5,6 +5,45 @@ import os
 from openai import OpenAI
 from datetime import datetime
 import json
+import pytz  # Para timezone de Brasília
+
+# Configuração de timezone
+TIMEZONE_BRASILIA = pytz.timezone('America/Sao_Paulo')
+
+def obter_data_brasilia():
+    """Obtém data/hora atual no timezone de Brasília"""
+    return datetime.now(TIMEZONE_BRASILIA)
+
+def formatar_data_amigavel(data_str):
+    """
+    Converte data do formato SQL (2025-08-15 05:05:59.063) 
+    para formato brasileiro (15/08/2025 05:05)
+    """
+    try:
+        if not data_str:
+            return ""
+        
+        # Se já está no formato brasileiro, retorna como está
+        if "/" in str(data_str):
+            return str(data_str)
+        
+        # Converter string para datetime
+        if isinstance(data_str, str):
+            # Remover microsegundos se existirem
+            data_limpa = data_str.split('.')[0]
+            data_obj = datetime.strptime(data_limpa, '%Y-%m-%d %H:%M:%S')
+        else:
+            data_obj = data_str
+        
+        # Ajustar para timezone de Brasília se necessário
+        if data_obj.tzinfo is None:
+            data_obj = TIMEZONE_BRASILIA.localize(data_obj)
+        
+        # Formatação brasileira
+        return data_obj.strftime('%d/%m/%Y %H:%M')
+    except Exception as e:
+        print(f"[DATA] ⚠️ Erro ao formatar data {data_str}: {e}")
+        return str(data_str)
 
 # Configurações do banco de dados
 DB_SERVER = os.environ.get('DB_SERVER', 'alrflorestal.database.windows.net')
@@ -119,11 +158,13 @@ def salvar_raw(telefone, conteudo_bruto, hash_msg):
         
         query = """
         INSERT INTO PRE_APONTAMENTO_RAW (PHONE, CONTEUDO_BRUTO, HASH, STATUS, CREATED_AT)
-        VALUES (?, ?, ?, 'PENDENTE', GETDATE())
+        VALUES (?, ?, ?, 'PENDENTE', ?)
         """
         
+        data_brasilia = obter_data_brasilia()
+        print(f"[SQL] 📅 Data/hora Brasília: {data_brasilia}")
         print(f"[SQL] 🚀 Executando INSERT...")
-        cursor.execute(query, (telefone, conteudo_bruto, hash_msg))
+        cursor.execute(query, (telefone, conteudo_bruto, hash_msg, data_brasilia))
         print(f"[SQL] ✅ INSERT executado com sucesso")
         
         conn.commit()
@@ -185,9 +226,14 @@ INSTRUÇÕES IMPORTANTES:
    - "RATEIO PRODUÇÃO MANUAL" → categoria "RATEIO_MANUAL"
    - "EQUIPE APOIO ENVOLVIDA" → categoria "APOIO" 
    - "ESTRUTURA APOIO ENVOLVIDA" → categoria "APOIO"
-5. Para cada colaborador: código (ex: 2508, 2689, TP001), produção (número após hífen), função (texto após PREMIO)
-6. RECEBE_PREMIO: 1 se tem "PREMIO", 0 se vazio
-7. Se algum campo estiver em branco, deixe como string vazia ""
+5. CÓDIGOS: REGRA IMPORTANTE para colaborador_id vs equipamento:
+   - Códigos numéricos (ex: 2508, 2689, 0528) = COLABORADORES → "colaborador_id"
+   - Códigos TP (ex: TP001, TP009) = EQUIPAMENTOS → "equipamento"
+   - Para categoria APOIO com TP: colaborador_id=null, equipamento="TP001"
+   - Para categoria RATEIO_MANUAL: colaborador_id="2508", equipamento=null
+6. Para cada colaborador: código, produção (número após hífen), função (texto após PREMIO)
+7. RECEBE_PREMIO: 1 se tem "PREMIO", 0 se vazio
+8. Se algum campo estiver em branco, deixe como string vazia ""
 
 TEXTO PARA PROCESSAR:
 {texto}
@@ -512,7 +558,7 @@ def salvar_boletim_staging(dados_boletim, raw_id):
             DIARIA_COLABORADOR, LOTE1, INSUMO1, QUANTIDADE1, LOTE2, INSUMO2, 
             QUANTIDADE2, LOTE3, INSUMO3, QUANTIDADE3, DIVISAO_PREMIO_IGUAL,
             OBSERVACOES, CREATED_AT
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, GETDATE())
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         
         cursor.execute(query, (
@@ -539,7 +585,8 @@ def salvar_boletim_staging(dados_boletim, raw_id):
             dados_boletim.get('insumo3'),
             dados_boletim.get('quantidade3'),
             dados_boletim.get('divisao_premio_igual'),
-            dados_boletim.get('observacoes')
+            dados_boletim.get('observacoes'),
+            obter_data_brasilia()  # Data/hora de Brasília
         ))
         
         conn.commit()
@@ -563,10 +610,11 @@ def salvar_premios_staging(premios_list, raw_id):
         INSERT INTO PREMIO_STAGING (
             RAW_ID, CATEGORIA, COLABORADOR_ID, EQUIPAMENTO, PRODUCAO, FUNCAO,
             RECEBE_PREMIO, VALOR_FIXO, CREATED_AT
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, GETDATE())
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         
         for premio in premios_list:
+            data_brasilia = obter_data_brasilia()
             cursor.execute(query, (
                 raw_id,
                 premio.get('categoria'),
@@ -575,7 +623,8 @@ def salvar_premios_staging(premios_list, raw_id):
                 premio.get('producao'),
                 premio.get('funcao'),
                 premio.get('recebe_premio'),
-                premio.get('valor_fixo')
+                premio.get('valor_fixo'),
+                data_brasilia
             ))
         
         conn.commit()
@@ -1119,14 +1168,14 @@ def verificar_permissao_coordenador(telefone_coordenador, raw_id):
         # Buscar todos os coordenadores e normalizar telefones para comparar
         query_coord = """
         SELECT TELEFONE, PERFIL, PROJETO, USUARIO FROM USUARIOS 
-        WHERE PERFIL = 'COORDENADOR'
+        WHERE PERFIL = 'COORDENADOR' AND PROJETO = ?
         """
-        print(f"[PERM] 📝 Buscando coordenadores...")
+        print(f"[PERM] 📝 Buscando coordenadores do projeto {projeto}...")
         
-        cursor.execute(query_coord)
+        cursor.execute(query_coord, (projeto,))
         coordenadores = cursor.fetchall()
         
-        print(f"[PERM] 📊 Total coordenadores: {len(coordenadores)}")
+        print(f"[PERM] 📊 Coordenadores do projeto {projeto}: {len(coordenadores)}")
         
         tem_permissao = False
         for coord in coordenadores:
@@ -1137,7 +1186,7 @@ def verificar_permissao_coordenador(telefone_coordenador, raw_id):
             
             print(f"[PERM] � Comparando: '{telefone_normalizado}' vs '{telefone_db_normalizado}' (Projeto: {projeto_coord}, Usuario: {usuario_coord})")
             
-            if telefone_db_normalizado == telefone_normalizado and projeto_coord == projeto:
+            if telefone_db_normalizado == telefone_normalizado:
                 print(f"[PERM] ✅ MATCH! {usuario_coord} autorizado para projeto {projeto}")
                 tem_permissao = True
                 break
