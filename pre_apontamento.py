@@ -421,6 +421,12 @@ INSTRUÇÕES IMPORTANTES:
    AREA RESTANTE: 40
    STATUS: ABERTO
    Deve gerar: lote1:"1508AB", insumo1:"MIREX", quantidade1:15.59, area_restante:40.0, status_campo:"ABERTO"
+
+   ⚠️ IMPORTANTE INSUMOS: 
+   - SEMPRE procure por padrões LOTE1:, INSUMO1:, QUANTIDADE1:
+   - SEMPRE procure por padrões LOTE2:, INSUMO2:, QUANTIDADE2: 
+   - Se encontrar, extraia EXATAMENTE o valor após os dois pontos
+   - Não deixe insumos como null se existirem no texto!
 8. Para cada colaborador: código, produção (número após hífen), função (texto após PREMIO ou linha seguinte)
 9. RECEBE_PREMIO: 1 se tem "PREMIO", 0 se vazio
 10. CATEGORIA ESTRUTURA: Sempre tem equipamento E colaborador_id quando aparece "TP### - #### - premio"
@@ -502,6 +508,8 @@ RESPONDA APENAS COM JSON VÁLIDO no formato:
         print(f"[DEBUG] 📊 Status campo: {boletim.get('status_campo')}")
         
         # PÓS-PROCESSAMENTO: Forçar cálculos que o OpenAI não fez
+        # IMPORTANTE: Adicionar texto original para pós-processamento
+        dados['_texto_original'] = texto
         dados = processar_campos_faltantes(dados)
         
         # DEBUG: Verificar campos APÓS pós-processamento
