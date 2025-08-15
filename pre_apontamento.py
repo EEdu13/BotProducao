@@ -226,8 +226,11 @@ def processar_campos_faltantes(dados):
     """Pós-processamento para garantir que campos críticos sejam preenchidos"""
     try:
         boletim = dados.get('boletim', {})
+        texto_original = dados.get('_texto_original', '')
         
         print(f"[POS-PROC] 🔧 Processando campos faltantes...")
+        print(f"[DEBUG] 📋 Texto original disponível: {'SIM' if texto_original else 'NÃO'}")
+        print(f"[DEBUG] 📏 Tamanho do texto: {len(texto_original)} chars")
         
         # 1. ÁREA RESTANTE: Calcular se não foi extraída
         area_total = boletim.get('area_total')
@@ -253,11 +256,13 @@ def processar_campos_faltantes(dados):
             print(f"[POS-PROC] 📊 Status campo inferido: {status_campo}")
         
         # 3. INSUMOS: Extrair do texto bruto se OpenAI não conseguiu
-        texto_original = dados.get('_texto_original', '')
+        # texto_original já foi definido no início da função
         
         # Verificar se pelo menos lote1 está vazio
         if boletim.get('lote1') is None and boletim.get('insumo1') is None:
             print(f"[POS-PROC] 📦 Extraindo insumos do texto bruto...")
+            print(f"[DEBUG] 📄 Texto original (primeiros 300 chars): {texto_original[:300]}")
+            print(f"[DEBUG] 🔍 Procurando por LOTE1:, INSUMO1:, QUANTIDADE1:")
             
             # Extrair LOTE1, INSUMO1, QUANTIDADE1
             import re
@@ -266,11 +271,15 @@ def processar_campos_faltantes(dados):
             if lote1_match:
                 boletim['lote1'] = lote1_match.group(1).strip()
                 print(f"[POS-PROC] 📦 LOTE1 extraído: {boletim['lote1']}")
+            else:
+                print(f"[DEBUG] ❌ LOTE1: não encontrado no texto")
             
             insumo1_match = re.search(r'INSUMO1:\s*([^\n\r]+)', texto_original, re.IGNORECASE)
             if insumo1_match:
                 boletim['insumo1'] = insumo1_match.group(1).strip()
                 print(f"[POS-PROC] 📦 INSUMO1 extraído: {boletim['insumo1']}")
+            else:
+                print(f"[DEBUG] ❌ INSUMO1: não encontrado no texto")
             
             quantidade1_match = re.search(r'QUANTIDADE1:\s*([^\n\r]+)', texto_original, re.IGNORECASE)
             if quantidade1_match:
@@ -280,6 +289,8 @@ def processar_campos_faltantes(dados):
                     print(f"[POS-PROC] 📦 QUANTIDADE1 extraída: {boletim['quantidade1']}")
                 except ValueError:
                     print(f"[POS-PROC] ⚠️ Erro ao converter quantidade1: {quantidade_str}")
+            else:
+                print(f"[DEBUG] ❌ QUANTIDADE1: não encontrado no texto")
             
             # Extrair LOTE2, INSUMO2, QUANTIDADE2 se existirem
             lote2_match = re.search(r'LOTE2:\s*([^\n\r]+)', texto_original, re.IGNORECASE)
