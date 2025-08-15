@@ -346,6 +346,17 @@ RESPONDA APENAS COM JSON VÁLIDO no formato:
         print(f"[OPENAI] ✅ JSON parseado com sucesso!")
         print(f"[OPENAI] Estrutura: boletim={bool(dados.get('boletim'))}, premios={len(dados.get('premios', []))}")
         
+        # DEBUG: Verificar campos específicos que não estão sendo extraídos
+        boletim = dados.get('boletim', {})
+        print(f"[DEBUG] 📦 Insumos extraídos:")
+        print(f"  - lote1: {boletim.get('lote1')}")
+        print(f"  - insumo1: {boletim.get('insumo1')}")
+        print(f"  - quantidade1: {boletim.get('quantidade1')}")
+        print(f"  - lote2: {boletim.get('lote2')}")
+        print(f"  - insumo2: {boletim.get('insumo2')}")
+        print(f"[DEBUG] 📏 Área restante: {boletim.get('area_restante')}")
+        print(f"[DEBUG] 📊 Status campo: {boletim.get('status_campo')}")
+        
         return dados
         
     except Exception as e:
@@ -357,15 +368,19 @@ RESPONDA APENAS COM JSON VÁLIDO no formato:
         prompt = f"""
 Você é um especialista em extrair dados de pré-apontamentos de campo. Analise o texto abaixo e extraia as informações seguindo EXATAMENTE a estrutura JSON solicitada.
 
-REGRAS IMPORTANTES:
+REGRAS IMPORTANTES - EXTRAÇÃO OBRIGATÓRIA:
 1. DATA: Se "HOJE", use a data atual no formato YYYY-MM-DD
 2. VALORES: Remover "R$", pontos de milhares, vírgula decimal vira ponto (ex: "R$ 18.004,43" = 18004.43)
-3. LOTES/INSUMOS: Extrair TODOS os insumos encontrados (lote1+insumo1+quantidade1, lote2+insumo2+quantidade2, etc)
-   - Buscar padrões: "LOTE:", "INSUMO:", "QUANTIDADE:", "PRODUTO:", "DEFENSIVO:"
-   - Exemplos: "LOTE ABC123", "INSUMO HERBICIDA", "QUANTIDADE 2,5L"
-4. ÁREA RESTANTE: Calcular AREA_TOTAL - AREA_REALIZADA, ou extrair se informado explicitamente
-5. STATUS CAMPO: Extrair informações sobre condições/status do campo 
-   - Buscar: "STATUS:", "SITUAÇÃO:", "CONDIÇÃO:", palavras como "CONCLUÍDO", "PARCIAL", "INICIADO", "PENDENTE"
+3. ⚠️ LOTES/INSUMOS - OBRIGATÓRIO: Extrair TODOS os insumos encontrados
+   - Buscar: "LOTE", "INSUMO", "QUANTIDADE", "PRODUTO", "DEFENSIVO", "HERBICIDA", "FERTILIZANTE"
+   - SEMPRE preencher lote1, insumo1, quantidade1 se encontrar qualquer insumo
+   - Se não encontrar, deixar como null (não como string vazia)
+4. ⚠️ ÁREA RESTANTE - OBRIGATÓRIO: SEMPRE calcular AREA_TOTAL - AREA_REALIZADA
+   - Mesmo que não informado, calcular matematicamente
+   - Se AREA_TOTAL=50 e AREA_REALIZADA=30, então area_restante=20.0
+5. ⚠️ STATUS CAMPO - OBRIGATÓRIO: Extrair status/situação do campo
+   - Buscar: "STATUS", "SITUAÇÃO", "CONDIÇÃO", "CONCLUÍDO", "PARCIAL", "INICIADO", "PENDENTE"
+   - Se não encontrar explícito, inferir baseado no contexto (ex: se area_realizada < area_total = "PARCIAL")
 6. RATEIO: Extrair colaborador_id e equipamento_id dos códigos
 7. RECEBE_PREMIO: 1 se tem "PREMIO", 0 se vazio
 8. AREAS: Converter vírgula para ponto decimal
