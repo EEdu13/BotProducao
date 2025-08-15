@@ -185,7 +185,7 @@ def salvar_raw(telefone, conteudo_bruto, hash_msg):
         print(f"[SQL] Conteúdo (primeiros 100 chars): {conteudo_bruto[:100]}")
         
         query = """
-        INSERT INTO PRE_APONTAMENTO_RAW (telefone, texto_original, data_hora)
+        INSERT INTO PRE_APONTAMENTO_RAW (PHONE, CONTEUDO_BRUTO, CREATED_AT)
         VALUES (?, ?, ?)
         """
         
@@ -719,7 +719,7 @@ def salvar_boletim_staging(dados_boletim, raw_id):
             raw_id, data_execucao, projeto, empresa, servico, fazenda, talhao,
             area_total, area_realizada, area_restante, status_campo, valor_ganho,
             diaria_colaborador, lote1, insumo1, quantidade1, lote2, insumo2, 
-            quantidade2, data_cadastro
+            quantidade2, CREATED_AT
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         
@@ -766,7 +766,7 @@ def salvar_premios_staging(premios_list, raw_id):
         query = """
         INSERT INTO PREMIO_STAGING (
             raw_id, categoria, colaborador_id, equipamento, producao, funcao,
-            recebe_premio, data_cadastro
+            recebe_premio, CREATED_AT
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """
         
