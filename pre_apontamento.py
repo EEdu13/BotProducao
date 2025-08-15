@@ -243,21 +243,26 @@ INSTRUÇÕES IMPORTANTES:
 4. PRÊMIOS/RATEIO: Extrair TODOS os colaboradores das seções:
    - "RATEIO PRODUÇÃO MANUAL" → categoria "RATEIO_MANUAL" 
    - "EQUIPE APOIO ENVOLVIDA" → categoria "APOIO" 
-   - "ESTRUTURA APOIO ENVOLVIDA" → categoria "APOIO"
+   - "ESTRUTURA APOIO ENVOLVIDA" → categoria "ESTRUTURA"
    - IMPORTANTE: Extrair CADA LINHA que tenha código, mesmo sem produção após hífen
 5. CÓDIGOS: REGRA IMPORTANTE para colaborador_id vs equipamento:
    - Códigos numéricos (ex: 2508, 2689, 0528) = COLABORADORES → "colaborador_id"
    - Códigos TP (ex: TP001, TP009) = EQUIPAMENTOS → "equipamento"
    - Para categoria APOIO com TP: colaborador_id=null, equipamento="TP001"
    - Para categoria RATEIO_MANUAL: colaborador_id="2508", equipamento=null
-6. EXEMPLO de extração correta:
+   - Para categoria ESTRUTURA: extrair código COMPLETO do colaborador (ex: se aparecer "05" extrair registro completo como "0528")
+6. EXTRAÇÃO DE COLABORADORES:
+   - Sempre extrair o código COMPLETO do colaborador, não apenas prefixos
+   - Se encontrar código parcial (ex: "05"), buscar no contexto o código completo
+   - Para ESTRUTURA, verificar se há padrão de códigos similares para completar
+7. EXEMPLO de extração correta:
    RATEIO PRODUÇÃO MANUAL
    2508 - 
    2509 - 
    2510 - 
    Deve gerar 3 prêmios com categoria RATEIO_MANUAL e colaborador_id respectivos
-7. Para cada colaborador: código, produção (número após hífen), função (texto após PREMIO)
-8. RECEBE_PREMIO: 1 se tem "PREMIO", 0 se vazio
+8. Para cada colaborador: código, produção (número após hífen), função (texto após PREMIO)
+9. RECEBE_PREMIO: 1 se tem "PREMIO", 0 se vazio
 9. Se algum campo estiver em branco, deixe como string vazia ""
 
 TEXTO PARA PROCESSAR:
@@ -1512,7 +1517,7 @@ def notificar_usuario_aprovacao(telefone_usuario, raw_id, status, observacoes=""
         elif status == "CORRECAO_SOLICITADA":
             mensagem += "🔧 *Correção necessária.*\nPor favor, envie um novo apontamento com as correções solicitadas."
             
-        mensagem += f"\n\n📅 *Processado em:* {datetime.now().strftime('%d/%m/%Y às %H:%M')}"
+        mensagem += f"\n\n📅 *Processado em:* {formatar_data_amigavel(obter_data_brasilia())}"
         
         # Enviar via Z-API
         return enviar_mensagem_zapi(telefone_usuario, mensagem)
