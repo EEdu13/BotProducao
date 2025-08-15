@@ -129,12 +129,12 @@ def salvar_raw(telefone, conteudo_bruto, hash_msg):
         conn.commit()
         print(f"[SQL] ✅ COMMIT realizado")
         
-        # Recuperar o ID inserido
-        print(f"[SQL] 🔍 Recuperando SCOPE_IDENTITY()...")
-        cursor.execute("SELECT SCOPE_IDENTITY()")
+        # Recuperar o ID inserido usando HASH (mais confiável)
+        print(f"[SQL] 🔍 Recuperando ID pelo HASH...")
+        cursor.execute("SELECT ID FROM PRE_APONTAMENTO_RAW WHERE HASH = ? ORDER BY CREATED_AT DESC", (hash_msg,))
         resultado = cursor.fetchone()
         
-        print(f"[SQL] Resultado SCOPE_IDENTITY: {resultado}")
+        print(f"[SQL] Resultado busca por HASH: {resultado}")
         
         if resultado and resultado[0]:
             raw_id = int(resultado[0])
