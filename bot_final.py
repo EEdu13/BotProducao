@@ -41,11 +41,12 @@ if not CLIENT_TOKEN: missing_vars.append('CLIENT_TOKEN')
 if not DB_PASSWORD: missing_vars.append('DB_PASSWORD')
 
 if missing_vars:
-    print(f"❌ ERRO: Variáveis de ambiente não encontradas: {missing_vars}")
-    print("🔍 Verifique no Railway se estas variáveis estão configuradas")
-    raise ValueError(f"Configure as variáveis: {', '.join(missing_vars)}")
+    print(f"⚠️ AVISO: Variáveis de ambiente não encontradas: {missing_vars}")
+    print("🔍 Algumas funcionalidades podem não funcionar corretamente")
+    print("💡 No Railway, verifique se estas variáveis estão configuradas")
+else:
+    print("🔐 Credenciais carregadas das variáveis de ambiente")
 
-print("🔐 Credenciais carregadas das variáveis de ambiente")
 print(f"🌐 Conectando em: {DB_SERVER}")
 print(f"📊 Database: {DB_DATABASE}")
 
