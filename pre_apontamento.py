@@ -182,7 +182,8 @@ RESPONDA APENAS COM JSON VÁLIDO no formato:
                 {"role": "user", "content": prompt}
             ],
             max_tokens=1000,
-            temperature=0.1
+            temperature=0.1,
+            timeout=30  # Timeout de 30 segundos
         )
         
         print(f"[OPENAI] ✅ Resposta recebida com sucesso")
@@ -676,6 +677,9 @@ def processar_pre_apontamento(numero, texto):
         
         # 4. Extrair dados com OpenAI
         print(f"[PRE-APONT] Iniciando extração OpenAI...")
+        print(f"[PRE-APONT] Verificando API Key: {OPENAI_API_KEY[:20] if OPENAI_API_KEY else 'NONE'}...")
+        print(f"[PRE-APONT] Cliente configurado: {'SIM' if client else 'NÃO'}")
+        
         dados_extraidos = extrair_dados_com_openai(texto)
         if not dados_extraidos:
             print(f"[PRE-APONT] ERRO: Falha na extração OpenAI")
