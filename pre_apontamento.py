@@ -184,19 +184,19 @@ def salvar_raw(telefone, conteudo_bruto, hash_msg):
         print(f"[SQL] Hash: {hash_msg}")
         print(f"[SQL] Conteúdo (primeiros 100 chars): {conteudo_bruto[:100]}")
         
-        query = """
-        INSERT INTO PRE_APONTAMENTO_RAW (PHONE, CONTEUDO_BRUTO, CREATED_AT)
-        VALUES (?, ?, ?)
-        """
+    query = """
+    INSERT INTO PRE_APONTAMENTO_RAW (PHONE, CONTEUDO_BRUTO, HASH, CREATED_AT)
+    VALUES (?, ?, ?, ?)
+    """
         
-        data_brasilia = obter_data_brasilia()
-        print(f"[SQL] 📅 Data/hora Brasília: {data_brasilia}")
-        print(f"[SQL] 🚀 Executando INSERT...")
-        cursor.execute(query, (telefone, conteudo_bruto, data_brasilia))
-        print(f"[SQL] ✅ INSERT executado com sucesso")
+    data_brasilia = obter_data_brasilia()
+    print(f"[SQL] 📅 Data/hora Brasília: {data_brasilia}")
+    print(f"[SQL] 🚀 Executando INSERT...")
+    cursor.execute(query, (telefone, conteudo_bruto, hash_msg, data_brasilia))
+    print(f"[SQL] ✅ INSERT executado com sucesso")
         
-        conn.commit()
-        print(f"[SQL] ✅ COMMIT realizado")
+    conn.commit()
+    print(f"[SQL] ✅ COMMIT realizado")
         
         # Recuperar o ID inserido usando HASH (mais confiável)
         print(f"[SQL] 🔍 Recuperando ID pelo HASH...")
